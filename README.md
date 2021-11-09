@@ -28,13 +28,7 @@ An automatic cell type annotation and cell retrievalmethod for large-scale scRNA
  - Zheng68K
  - AMB
  - XIN
- - Fetel
 
-##### Inter-dataset:
- - CellBench
- - X10v2
- - Pancreatic
- - AlignedPancreatic
  
 ## Establish a venv
 - `python3 -m venv .venv`
