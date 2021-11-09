@@ -15,10 +15,7 @@ An automatic cell type annotation and cell retrievalmethod for large-scale scRNA
   - `--lr_decay`   learning rate decay
   - `--n_layers`   number of layers
   - `--epochs`       number of epochs to run
-  - `--dataset {'TM', 'BaronHuman', 'Zheng68K', 'AMB', "XIN", "pbmc68k",
-                        "CellBench", "Pancreatic", "AlignedPancreatic",
-                        "X10v2", "CelSeq", "DropSeq", "InDrop", "SeqWell", "SmartSeq",
-                        "Fetal"}`
+  - `--dataset {'TM', 'BaronHuman', 'Zheng68K', 'AMB', "XIN", "pbmc68k"}`
                         dataset to train against
                           
 ## Built-in datasets
