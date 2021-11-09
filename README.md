@@ -20,8 +20,7 @@ An automatic cell type annotation and cell retrievalmethod for large-scale scRNA
                         "X10v2", "CelSeq", "DropSeq", "InDrop", "SeqWell", "SmartSeq",
                         "Fetal"}`
                         dataset to train against
-                        
-  *For more options, please see https://github.com/wbh123456/scDeepHash/blob/master/scDeepHash.py*                      
+                          
 ## Built-in datasets
 ##### Intra-dataset:
  - Baron Human
