@@ -93,7 +93,7 @@ class scDeepHashModel(pl.LightningModule):
         self.lr_decay = lr_decay
         self.decay_every = decay_every
         self.samples_in_each_class = None  # Later initialized in training step
-        self.hash_centers = get_hash_centers(self.n_class, self.bit)
+        self.cell_anchors = get_cell_anchors(self.n_class, self.bit)
         self.n_layers = n_layers
         self.weight_decay = weight_decay
         self.measure_retrieval = measure_retrieval
@@ -156,8 +156,8 @@ class scDeepHashModel(pl.LightningModule):
 
     def loss_functions(self, hash_codes, labels):
         hash_codes = hash_codes.tanh()
-        hash_centers = self.hash_centers[labels]
-        hash_centers = hash_centers.type_as(hash_codes)
+        cell_anchors = self.cell_anchors[labels]
+        cell_anchors = cell_anchors.type_as(hash_codes)
 
         if self.samples_in_each_class == None:
             self.samples_in_each_class = self.trainer.datamodule.samples_in_each_class
@@ -171,7 +171,7 @@ class scDeepHashModel(pl.LightningModule):
         # Center Similarity Loss
         BCELoss = nn.BCELoss(weight=weight.unsqueeze(1).repeat(1, self.bit))
         cell_anchor_loss = BCELoss(0.5 * (hash_codes + 1),
-                         0.5 * (hash_centers + 1))
+                         0.5 * (cell_anchors + 1))
         # Quantization Loss
         Q_loss = (hash_codes.abs() - 1).pow(2).mean()
 
@@ -323,8 +323,6 @@ if __name__ == '__main__':
                         help="number of epochs to run")
     parser.add_argument("--dataset", choices=
                         ['TM', 'BaronHuman', 'Zheng68K', 'AMB', "XIN", "pbmc68k",
-                        "CellBench", "Pancreatic", "AlignedPancreatic",
-                        "X10v2", "CelSeq", "DropSeq", "InDrop", "SeqWell", "SmartSeq",
                         "Fetal"],
                         help="dataset to train against")
     # Control parameters
@@ -387,45 +385,6 @@ if __name__ == '__main__':
         datamodule = Pbmc68kDataModule(num_workers=4, batch_size=128, feature_selection=feature_selection)
         N_CLASS = 11
         N_FEATURES = 1000
-
-    # Inter
-    elif dataset == "CellBench":
-        datamodule = CellBenchDataModule(num_workers=4, batch_size=128, train_set='celseq2') # train_set='celseq2' or 'cellbench10x'
-        N_CLASS = 5
-        N_FEATURES = 9887
-    elif dataset == "Pancreatic":
-        datamodule = PancreaticDataModule(num_workers=4, batch_size=128, test_set='baronhuman')
-        N_CLASS = 4
-        N_FEATURES = 15642
-    elif dataset == "AlignedPancreatic":
-        datamodule = AlignedPancreaticDataModule(num_workers=4, batch_size=128, test_set='baronhuman')
-        N_CLASS = 4
-        N_FEATURES = 15642
-    elif dataset == "X10v2":
-        datamodule = X10v2DataModule(num_workers=4, batch_size=128)
-        N_CLASS = 9
-        N_FEATURES = 22280
-    elif dataset == "CelSeq":
-        datamodule = CelSeqDataModule(num_workers=4, batch_size=128)
-        N_CLASS = 7
-        N_FEATURES = 20041
-    elif dataset == "DropSeq":
-        datamodule = DropSeqDataModule(num_workers=4, batch_size=128)
-        N_CLASS = 9
-        N_FEATURES = 19922
-    elif dataset == "InDrop":
-        datamodule = InDropDataModule(num_workers=4, batch_size=128)
-        N_CLASS = 7 
-        N_FEATURES = 17159
-    elif dataset == "SeqWell":
-        datamodule = SeqWellDataModule(num_workers=4, batch_size=128)
-        N_CLASS = 7
-        N_FEATURES = 21059
-    elif dataset == "SmartSeq":
-        datamodule = SmartSeq2DataModule(num_workers=4, batch_size=128)
-        N_CLASS = 6
-        # N_FEATURES = 19922
-        N_FEATURES = 22617
 
     # large dataset
     elif dataset == "Fetal":
