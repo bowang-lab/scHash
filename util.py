@@ -68,7 +68,7 @@ def compute_metrics(query_dataloader, net, class_num, show_time=False, use_cpu=F
         binaries_val, labels_val = compute_result(net.trainer.datamodule.val_dataloader(), net)
         binaries_database, labels_database = torch.cat([binaries_train, binaries_val]), torch.cat([labels_train, labels_val])
 
-        # 转换成one-hot encoding，方便后续高效计算
+        # one-hot encoding
         labels_database_one_hot = categorical_to_onehot(labels_database, class_num)
         labels_query_one_hot = categorical_to_onehot(labels_query, class_num)
 
