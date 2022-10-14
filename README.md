@@ -1,4 +1,4 @@
-# Single-cell Deep Hashing (scDeepHash)
+# Single-cell Hashing using deep learning (scHash)
 An automatic cell type annotation and cell retrievalmethod for large-scale scRNA-seq datasets using neuralnetwork-based hashing.
 
 ## Quick Start:
