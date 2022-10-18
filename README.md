@@ -3,28 +3,26 @@ An automatic cell type annotation and cell retrievalmethod for large-scale scRNA
 
 ## Quick Start:
 - `pip3 install -r requirements.txt` Install dependencies
-- `python3 --dataset BaronHuman` Train scDeepHash on Baron Human
+- `python3 scHash --checkpoint_path checkpoint --data_dir data.h5ad  --batch_key dataset` 
 
-*The model successfully runs with Python 3.6.9*
+*The model successfully runs with Python 3.8.1*
 
 
 ### Options
+  - `--data_dir` Path to data source that contains both train and query data in .h5ad Anndata form
   - `--checkpoint_path` Path to save checkpoint
+  - `--query`           Query dataset name in data.obs[bacth_key]
   - `--l_r`             learning rate
-  - `--lamb`           lambda of quantization loss
-  - `--lr_decay`   learning rate decay
-  - `--n_layers`   number of layers
-  - `--epochs`       number of epochs to run
-  - `--dataset {'TM', 'BaronHuman', 'Zheng68K', 'AMB', "XIN", "pbmc68k"}`
-                        dataset to train against
-                          
-## Built-in datasets
-##### Intra-dataset:
- - Baron Human
- - TM
- - Zheng68K
- - AMB
- - XIN
+  - `--batch_size`      Batch Size
+  - `--log_norm`        If applying log normalization log10(X+1)
+  - `--hvg`             If doing the high variable gene selection
+  - `--lamb`            lambda of quantization loss
+  - `--lr_decay`        learning rate decay
+  - `--n_layers`        Number of layers
+  - `--epochs`          Number of epochs to run
+  - `--batch_key`       Batch variable key in the data.obs dataframe  
+  - `--cell_type_key`   Cell type key for the true labels variable key in the data.obs dataframe  
+  - `--result_dir`      Path to the result csv                   
 
  
 ## Establish a venv

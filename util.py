@@ -1,20 +1,15 @@
 # direct import  hadamrd matrix from scipy
 from scipy.linalg import hadamard  
 import torch
-from torchvision import models
-from torch import nn
-import pytorch_lightning as pl
-from torch.nn import functional as F
-from tqdm import tqdm
 from collections import Counter
 import statistics
 import pandas as pd
 import numpy as np
 from sklearn.metrics import f1_score, precision_score, recall_score
-from sklearn.metrics.cluster import adjusted_rand_score
+from sklearn.metrics.cluster import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.metrics import classification_report
 import time
-
+import random
 
 # top-level interface for metric calculation
 def compute_metrics(query_dataloader, net, class_num, show_time=False, use_cpu=False, measure_retrieval=False, topK=-1):
@@ -50,17 +45,18 @@ def compute_metrics(query_dataloader, net, class_num, show_time=False, use_cpu=F
     F1_score_macro_CHC = f1_score(labels_query, labels_pred_CHC, average='macro')
     F1_score_micro_CHC = f1_score(labels_query, labels_pred_CHC, average='micro')
     F1_score_per_class_CHC = f1_score(labels_query, labels_pred_CHC, average=None)
-    target_names = [i for i in net.trainer.datamodule.label_mapping.classes_]
+    target_names = [i for i in net.trainer.datamodule.label_mapping.keys()]
     class_report = classification_report(labels_query, labels_pred_CHC, labels=[i for i in range(len(target_names))], target_names=target_names)
 
     # (3) F1_score median
     F1_score_median_CHC = statistics.median(F1_score_per_class_CHC)
 
     # (4) precision, recall
-    precision = precision_score(labels_query, labels_pred_CHC, average="macro")
-    recall = recall_score(labels_query, labels_pred_CHC, average="macro")
+    precision = precision_score(labels_query, labels_pred_CHC, average="weighted")
+    recall = recall_score(labels_query, labels_pred_CHC, average="weighted")
 
-    # (5) adjusted random index 
+    # (5) normalized_mutual_info_score, adjusted random index 
+    nmi = normalized_mutual_info_score(labels_query, labels_pred_CHC)
     ari = adjusted_rand_score(labels_query, labels_pred_CHC)
 
     if measure_retrieval:
@@ -78,21 +74,87 @@ def compute_metrics(query_dataloader, net, class_num, show_time=False, use_cpu=F
         save_retreival_result(binaries_database.cpu().numpy(), binaries_query.cpu().numpy(), 
                     labels_database.numpy(), labels_query.numpy(), topK)
 
-
-        # compute_retrieval_speed(binaries_database, binaries_query, 1000)
-        # compute_retrieval_speed(binaries_database, binaries_query, 10000)
-        # compute_retrieval_speed(binaries_database, binaries_query, 100000)
-        # compute_retrieval_speed(binaries_database, binaries_query, 1000000)
-
     else:
         map_score = None
 
     CHC_metrics = (labeling_accuracy_CHC, 
-                F1_score_weighted_average_CHC, F1_score_median_CHC, F1_score_per_class_CHC, F1_score_macro_CHC, F1_score_micro_CHC,
+                F1_score_weighted_average_CHC, F1_score_median_CHC, F1_score_per_class_CHC,
                 precision, recall,
-                ari, map_score, class_report)
+                nmi, ari, map_score, class_report)
 
     return CHC_metrics
+
+def test_compute_metrics(query_dataloader, net, class_num, show_time=False, use_cpu=False, measure_retrieval=False, topK=-1):
+    ''' Labeling Strategy:
+    Closest Cell Anchor:
+    Label the query using the label associated to the nearest cell anchor
+    - Computation Complexity:
+    O(m) << O(n) per puery
+    m = number of classes in database
+    - Less Accurate
+    '''
+    start_time_CHC = time.time()
+    if use_cpu:
+        # print("Compute result using cpu")
+        binaries_query, labels_query = compute_result_cpu(query_dataloader, net)
+    else:
+        
+        def compute_result_v2(dataloader, net):
+            binariy_codes, labels = [],[]
+            device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')  
+            for data in dataloader:
+                img = data[0].to(device)
+                binariy_codes.append(net(img))
+                labels.append(data[1])
+            return torch.vstack(binariy_codes),torch.cat(labels)
+ 
+        
+        # print("Compute result using gpu")
+        ######################## modified here
+        start = time.time()
+        # original function
+        # binaries_query, labels_query = compute_result(query_dataloader, net)
+        binaries_query,labels_query = compute_result_v2(query_dataloader, net)
+        hashing_time = time.time() - start
+        print("################### compute_result_v2 time: ", hashing_time)
+        ######################## modified here
+        
+    
+    
+    start = time.time() 
+    labels_pred_CHC = get_labels_pred_closest_cell_anchor(binaries_query.cpu().numpy(), labels_query.numpy(),
+                                                        net.cell_anchors.numpy())
+    cell_assign_time = time.time() - start
+    
+    query_time = cell_assign_time+hashing_time
+    print("################### cell_assign time: ",cell_assign_time)
+    print("################### query time: ",query_time)
+    
+    CHC_duration = time.time() - start_time_CHC
+    query_num = binaries_query.shape[0]
+    if show_time:
+        print("\n")
+        print("  - Time spent on annotating {} test data: {:.2f}s".format(query_num, CHC_duration))
+        print("  - CHC query speed: {:.2f} queries/s".format(query_num/CHC_duration))
+    
+    
+    # (1) labeling accuracy
+    labeling_accuracy = compute_labeling_strategy_accuracy(labels_pred_CHC, labels_query.numpy())
+    
+    # (2) F1_score, average = (micro, macro, weighted)
+    f1 = f1_score(labels_query, labels_pred_CHC, average='weighted')
+    F1_score_per_class_CHC = f1_score(labels_query, labels_pred_CHC, average=None)
+    f1_median = statistics.median(F1_score_per_class_CHC)
+
+    # (4) precision, recall
+    precision = precision_score(labels_query, labels_pred_CHC, average="weighted")
+    recall = recall_score(labels_query, labels_pred_CHC, average="weighted")
+
+    # (5) normalized_mutual_info_score, adjusted random index 
+    nmi = normalized_mutual_info_score(labels_query, labels_pred_CHC)
+    ari = adjusted_rand_score(labels_query, labels_pred_CHC)
+
+    return nmi,labeling_accuracy,precision,recall,f1, hashing_time, cell_assign_time, query_time,f1_median
 
 # generate cell anchors
 def get_cell_anchors(n_class, bit):
@@ -267,14 +329,26 @@ def compute_labeling_strategy_accuracy(labels_pred, labels_query):
     return same / labels_query.shape[0]
 
 
+# # compute Binary and get labels
+# def compute_result(dataloader, net):
+#     binariy_codes, labels = [], []
+#     net.eval()
+#     for img, label in dataloader:
+#         labels.append(label)
+#         binariy_codes.append((net(img.cuda())).data)
+#     return torch.cat(binariy_codes).tanh(), torch.cat(labels)
+
+#  modified here ##############################################################################################
 # compute Binary and get labels
 def compute_result(dataloader, net):
     binariy_codes, labels = [], []
-    net.eval()
-    for img, label in dataloader:
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')  
+    for data in dataloader:
+        img, label = data[0].to(device), data[1]
         labels.append(label)
-        binariy_codes.append((net(img.cuda())).data)
-    return torch.cat(binariy_codes).tanh(), torch.cat(labels)
+        binariy_codes.append(net(img))
+    return torch.vstack(binariy_codes).tanh(), torch.cat(labels)
+#############################################################################################################################################
 
 # compute Binary and get labels
 def compute_result_cpu(dataloader, net):
