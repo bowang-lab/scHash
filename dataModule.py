@@ -2,7 +2,7 @@ from collections import Counter
 import torch
 import pytorch_lightning as pl
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Subset, Dataset
+from torch.utils.data import DataLoader,  Subset, Dataset
 from torch.nn import functional as F
 from collections import Counter
 from scipy.sparse import csr_matrix
@@ -88,7 +88,7 @@ class Cross_DataModule(pl.LightningDataModule):
         self.cell_type_key = cell_type_key
         self.batch_key = batch_key
 
-    def setup(self):
+    def setup(self, stage):
         # Step #1: Read in all labels and keep cells with count > 10
         print(self.data_dir)
         full_data = ad.read_h5ad(self.data_dir)
@@ -207,7 +207,7 @@ class Intra_DataModule(pl.LightningDataModule):
         self.batch_key = batch_key
         self.normalize = normalize
 
-    def setup(self):
+    def setup(self, stage):
         # Step #1: Read in all labels and keep cells with count > 10
         print(self.data_dir)
         full_data = ad.read_h5ad(self.data_dir)
