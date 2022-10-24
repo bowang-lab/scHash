@@ -278,7 +278,7 @@ if __name__ == '__main__':
                         help="how many epochs a learning rate happens")
     parser.add_argument("--weight_decay", type=float, default=0.0001,
                         help="weight decay (L2 penalty)")
-    parser.add_argument("--n_layers", type=int, default=5,
+    parser.add_argument("--n_layers", type=int, default=3,
                         help="number of layers")
     # Training parameters
     parser.add_argument("--epochs", type=int, default=151,
@@ -288,7 +288,7 @@ if __name__ == '__main__':
     # Control parameters
     parser.add_argument("--topK", type=int, default=-1,
                         help="topK for MAP")
-    parser.add_argument("--checkpoint_path", type=str,
+    parser.add_argument("--checkpoint_path", type=str, default='checkpoint',
                         help="The path to save checkpoints")
     parser.add_argument("--query", type=str,
                         help="The query dataset")
@@ -298,13 +298,13 @@ if __name__ == '__main__':
                         help="The query dataset")
     parser.add_argument("--data_dir", type=str,
                         help="Data Path")
-    parser.add_argument("--hvg", type=str, default='False',
+    parser.add_argument("--hvg", type=str, default='True',
                         help="select highly variable genes")
-    parser.add_argument("--log_norm", type=str, default='False',
+    parser.add_argument("--log_norm", type=str, default='True',
                         help="Log(X+1) normalize all data")
-    parser.add_argument("--normalize", type=str, default='False',
+    parser.add_argument("--normalize", type=str, default='True',
                         help="normalize by x-u/sigma")
-    parser.add_argument("--batch_size", type=int, default=256,
+    parser.add_argument("--batch_size", type=int, default=128,
                         help="batch size")
     parser.add_argument("--cell_type_key", type=str, default='cell_type',
                         help="Cell Type key")
