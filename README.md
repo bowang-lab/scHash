@@ -3,7 +3,7 @@ An automatic cell type annotation and cell retrievalmethod for large-scale scRNA
 
 ## Quick Start:
 - `pip3 install -r requirements.txt` Install dependencies
-- `python3 scHash --checkpoint_path checkpoint --data_dir data.h5ad  --batch_key dataset` 
+- `python3 scHash.py --checkpoint_path checkpoint --data_dir data.h5ad --batch_key dataset --query query --result_dir result.csv` 
 
 *The model successfully runs with Python 3.8.1*
 

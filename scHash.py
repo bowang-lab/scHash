@@ -10,7 +10,7 @@ import numpy as np
 import argparse
 import anndata as ad
 import resource
-
+import os
 from util import *
 from dataModule import *
 
@@ -63,9 +63,9 @@ def test_class_balance_loss():
 
 ###------------------------------Model---------------------------------------###
 
-class scDeepHashModel(pl.LightningModule):
-    def __init__(self, n_class, n_features, batch_size=64, l_r=1e-5, lamb_da=0.0001, beta=0.9999, bit=64, lr_decay=0.9, decay_every=20, n_layers=5, weight_decay=0.0005, measure_retrieval=False, topK=-1):
-        super(scDeepHashModel, self).__init__()
+class scHashModel(pl.LightningModule):
+    def __init__(self, n_class, n_features, batch_size=64, l_r=1e-5, lamb_da=0.0001, beta=0.9999, bit=64, lr_decay=0.9, decay_every=20, n_layers=5, weight_decay=0.0005, topK=-1):
+        super(scHashModel, self).__init__()
         print("hparam: l_r = {}, lambda = {}, beta = {}".format(l_r, lamb_da, beta))
         self.batch_size = batch_size
         self.l_r = l_r
@@ -79,7 +79,6 @@ class scDeepHashModel(pl.LightningModule):
         self.cell_anchors = get_cell_anchors(self.n_class, self.bit)
         self.n_layers = n_layers
         self.weight_decay = weight_decay
-        self.measure_retrieval = measure_retrieval
         self.topK = topK
         ##### model structure ####
         if n_layers == 5:
@@ -231,7 +230,7 @@ class scDeepHashModel(pl.LightningModule):
         
         test_dataloader = self.trainer.datamodule.test_dataloader()
 
-        test_matrics_CHC = test_compute_metrics(test_dataloader, self, self.n_class, show_time=True, use_cpu=False, measure_retrieval=self.measure_retrieval, topK=self.topK)
+        test_matrics_CHC = test_compute_metrics(test_dataloader, self, self.n_class, show_time=True, use_cpu=False, topK=self.topK)
         
         (nmi,accuracy,precision,recall,f1,hashing_time, cell_assign_time, query_time, f1_median) = test_matrics_CHC
         
@@ -279,44 +278,38 @@ if __name__ == '__main__':
                         help="how many epochs a learning rate happens")
     parser.add_argument("--weight_decay", type=float, default=0.0001,
                         help="weight decay (L2 penalty)")
-    parser.add_argument("--n_layers", type=int, default=5,
+    parser.add_argument("--n_layers", type=int, default=3,
                         help="number of layers")
-    parser.add_argument("--fold_number", type=int, default=0,
-                        help = "5-fold number")
     # Training parameters
-    parser.add_argument("--epochs", type=int, default=301,
+    parser.add_argument("--epochs", type=int, default=151,
                         help="number of epochs to run")
-    parser.add_argument("--dataset", default='',
+    parser.add_argument("--dataset", default='Custom',
                         help="dataset to train against")
     # Control parameters
-    parser.add_argument("--test", type=str, default='',
-                        help="To test against a specific checkpoint")
-    parser.add_argument("--measure_retrieval", type=bool, default=False,
-                        help="Whether to measure retrieval metrics (MAP)")
     parser.add_argument("--topK", type=int, default=-1,
                         help="topK for MAP")
-    parser.add_argument("--feature_selection", type=bool, default=False,
-                        help="Whether to use feature selection for input data")
-    parser.add_argument("--checkpoint_path", type=str,
+    parser.add_argument("--checkpoint_path", type=str, default='checkpoint',
                         help="The path to save checkpoints")
     parser.add_argument("--query", type=str,
                         help="The query dataset")
-    parser.add_argument("--method", type=str, default='scDeepHash Raw data',
+    parser.add_argument("--method", type=str, default='scHash',
                         help="The query dataset")
     parser.add_argument("--result_dir", type=str, required=True,
                         help="The query dataset")
-    parser.add_argument("--data_dir", type=str, default='../../Benchmark/fivePancreas_Mapping/scDeepHash1.csv',
-                        help="The query dataset")
-    parser.add_argument("--hvg", type=str, default='False',
+    parser.add_argument("--data_dir", type=str,
+                        help="Data Path")
+    parser.add_argument("--hvg", type=str, default='True',
                         help="select highly variable genes")
-    parser.add_argument("--log_norm", type=str, default='False',
+    parser.add_argument("--log_norm", type=str, default='True',
                         help="Log(X+1) normalize all data")
-    parser.add_argument("--normalize", type=str, default='False',
+    parser.add_argument("--normalize", type=str, default='True',
                         help="normalize by x-u/sigma")
-    parser.add_argument("--batch_size", type=int, default=256,
+    parser.add_argument("--batch_size", type=int, default=128,
                         help="batch size")
-    parser.add_argument("--batch_key", type=str, default='',
-                        help="batch key")
+    parser.add_argument("--cell_type_key", type=str, default='cell_type',
+                        help="Cell Type key")
+    parser.add_argument("--batch_key", type=str, default='dataset',
+                        help="Batch key")
     args = parser.parse_args()
 
     l_r = args.l_r
@@ -324,19 +317,16 @@ if __name__ == '__main__':
     beta = args.beta
     weight_decay = args.weight_decay
     n_layers = args.n_layers
-    fold_number = args.fold_number
 
     max_epochs = args.epochs
     dataset = args.dataset
     lr_decay = args.lr_decay
     batch_size = args.batch_size
     batch_key = args.batch_key
+    cell_type_key = args.cell_type_key
 
     decay_every = args.decay_every
-    test_checkpoint = args.test
-    measure_retrieval = args.measure_retrieval
     topK = args.topK
-    feature_selection = args.feature_selection
     checkpoint_path = args.checkpoint_path
     query = args.query
     method = args.method
@@ -352,7 +342,7 @@ if __name__ == '__main__':
     if dataset in ['symphony_tms','tms']:
         datamodule = Intra_DataModule(data_dir = data_dir, cell_type_key = 'cell_ontology_class', batch_key = batch_key, num_workers=4, batch_size=batch_size, hvg = hvg,log_norm = log_norm, normalize = normalize)
     else:
-        datamodule = Cross_DataModule(data_dir = data_dir, batch_key = batch_key, num_workers=4, batch_size=batch_size, query = query, hvg = hvg, log_norm = log_norm, normalize=normalize)
+        datamodule = Cross_DataModule(data_dir = data_dir, batch_key = batch_key, cell_type_key=cell_type_key, num_workers=4, batch_size=batch_size, query = query, hvg = hvg, log_norm = log_norm, normalize=normalize)
 
     datamodule.setup(None)
     N_CLASS = datamodule.N_CLASS
@@ -362,76 +352,77 @@ if __name__ == '__main__':
     checkpointPath = checkpoint_path + dataset
     print("Feature size =", datamodule.N_FEATURES)
     # Train
-    if test_checkpoint == '':
-        checkpoint_callback = ModelCheckpoint(
-                                    monitor='Val_F1_score_median_CHC_epoch',
-                                    dirpath=checkpointPath,
-                                    filename='scDeepHash-{epoch:02d}-{Val_F1_score_median_CHC_epoch:.3f}',
-                                    verbose=True,
-                                    # save_last = True,
-                                    mode='max'
-                                    )
-        early_stopping_callback = EarlyStopping(monitor="Val_F1_score_median_CHC_epoch")
-        start = time.time()
-        trainer = pl.Trainer(max_epochs=max_epochs,
-                            gpus=1,
-                            check_val_every_n_epoch=10,
-                            progress_bar_refresh_rate=50,
-                            # limit_train_batches=0.2,
-                            # limit_val_batches=0.2,
-                            callbacks=[checkpoint_callback]
-                            )
-        print("Number of Feature: ", N_FEATURES)
-        model = scDeepHashModel(N_CLASS, N_FEATURES, l_r=l_r, lamb_da=lamb_da,
-                            beta=beta, lr_decay=lr_decay, decay_every=decay_every,
-                            n_layers=n_layers, weight_decay=weight_decay,
-                            measure_retrieval=measure_retrieval, topK=topK)
 
-        trainer.fit(model = model, datamodule = datamodule)
-        ref_building = time.time()-start
+    checkpoint_callback = ModelCheckpoint(
+                                monitor='Val_F1_score_median_CHC_epoch',
+                                dirpath=checkpointPath,
+                                filename='scHash-{epoch:02d}-{Val_F1_score_median_CHC_epoch:.3f}',
+                                verbose=True,
+                                # save_last = True,
+                                mode='max'
+                                )
+    early_stopping_callback = EarlyStopping(monitor="Val_F1_score_median_CHC_epoch")
+    start = time.time()
+    trainer = pl.Trainer(max_epochs=max_epochs,
+                        gpus=1,
+                        check_val_every_n_epoch=10,
+                        progress_bar_refresh_rate=50,
+                        callbacks=[checkpoint_callback]
+                        )
+    print("Number of Feature: ", N_FEATURES)
+    model = scHashModel(N_CLASS, N_FEATURES, l_r=l_r, lamb_da=lamb_da,
+                        beta=beta, lr_decay=lr_decay, decay_every=decay_every,
+                        n_layers=n_layers, weight_decay=weight_decay, topK=topK)
+
+    trainer.fit(model = model, datamodule = datamodule)
+    ref_building = time.time()-start
+    
+    ref_memory = torch.cuda.max_memory_allocated()/ 1024 ** 3
+    cpu_mem =  resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024**2
+
+    # Test the best model
+    best_model_path = checkpoint_callback.best_model_path
+    trainer = pl.Trainer(max_epochs=max_epochs,
+            gpus=1,
+            check_val_every_n_epoch=5,
+            callbacks=[checkpoint_callback]
+            )
+    best_model = scHashModel.load_from_checkpoint(
+        best_model_path, n_class=N_CLASS, n_features=N_FEATURES,
+        l_r=l_r, lamb_da=lamb_da,
+        beta=beta, lr_decay=lr_decay, decay_every=decay_every,
+        n_layers=n_layers, weight_decay=weight_decay)
         
-        ref_memory = torch.cuda.max_memory_allocated()/ 1024 ** 3
-        cpu_mem =  resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024**2
+    best_model.eval()
 
-        # Test the best model
-        best_model_path = checkpoint_callback.best_model_path
-        trainer = pl.Trainer(max_epochs=max_epochs,
-                gpus=1,
-                check_val_every_n_epoch=5,
-                callbacks=[checkpoint_callback]
-                )
-        best_model = scDeepHashModel.load_from_checkpoint(
-            best_model_path, n_class=N_CLASS, n_features=N_FEATURES,
-            l_r=l_r, lamb_da=lamb_da,
-            beta=beta, lr_decay=lr_decay, decay_every=decay_every,
-            n_layers=n_layers, weight_decay=weight_decay)
-            
-        best_model.eval()
-   
-        start = time.time()
-        trainer.test(model=best_model, datamodule=datamodule)
-        mapping = time.time()-start
-        query_mem =  resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024**2 - cpu_mem
+    start = time.time()
+    trainer.test(model=best_model, datamodule=datamodule)
+    mapping = time.time()-start
+    query_mem =  resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024**2 - cpu_mem
 
-        result = trainer.callback_metrics
-        nmi = round(result['Test_NMI'].item(),3)
-        p = round(result['Test_precision'].item(),3)
-        r = round(result['Test_NMI'].item(),3)
-        f = round(result['Test_F1'].item(),3)
-        h = round(result['Test_hashing_time'].item(),3)
-        c = round(result['Test_cell_assign_time'].item(),3)
-        q = round(result['Test_query_time'].item(),3)
-        a = round(result['Test_accuracy'].item(),3)
-        f1_median = round(result['Test_F1_Median'].item(),3)
-        
+    result = trainer.callback_metrics
+    nmi = round(result['Test_NMI'].item(),3)
+    p = round(result['Test_precision'].item(),3)
+    r = round(result['Test_NMI'].item(),3)
+    f = round(result['Test_F1'].item(),3)
+    h = round(result['Test_hashing_time'].item(),3)
+    c = round(result['Test_cell_assign_time'].item(),3)
+    q = round(result['Test_query_time'].item(),3)
+    a = round(result['Test_accuracy'].item(),3)
+    f1_median = round(result['Test_F1_Median'].item(),3)
+    
 
+    if os.path.isfile(result_dir):
         result_table = pd.read_csv(result_dir)
+    else: 
+        result_table = pd.DataFrame()
+
+    
+    if dataset in ['symphony_tms','tms','COVID19']:
+        result_table = result_table.append({'dataset':dataset,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c, 'NMI':nmi,'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':max_epochs,'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'f1_median':f1_median},ignore_index=True)
+    else:
+        result_table = result_table.append({'query_dataset':query,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c, 'NMI':nmi,'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':int(max_epochs),'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'batch_key':batch_key,'f1_median':f1_median},ignore_index=True)
         
-        if dataset in ['symphony_tms','tms','COVID19']:
-            result_table = result_table.append({'dataset':dataset,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c, 'NMI':nmi,'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':max_epochs,'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'f1_median':f1_median},ignore_index=True)
-        else:
-            result_table = result_table.append({'query_dataset':query,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c, 'NMI':nmi,'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':int(max_epochs),'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'batch_key':batch_key,'f1_median':f1_median},ignore_index=True)
-            
-        
-        result_table = result_table.round({'ref_building_time':3, 'query_mapping_time':3, 'accuracy':3, 'hashing_time':3, 'NMI':3 ,'precision':3, 'recall':3, 'f1':3, 'f1_median':3, 'cell_assignment_time':3,})
-        result_table.to_csv(result_dir,index=False)
+    
+    result_table = result_table.round({'ref_building_time':3, 'query_mapping_time':3, 'accuracy':3, 'hashing_time':3, 'NMI':3 ,'precision':3, 'recall':3, 'f1':3, 'f1_median':3, 'cell_assignment_time':3,})
+    result_table.to_csv(result_dir,index=False)
