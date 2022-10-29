@@ -337,22 +337,21 @@ if __name__ == '__main__':
     normalize = True if args.normalize =='True' else False
     top_genes_count = '1000_seuratv3' if hvg else ''
     
-
+    data = ad.read_h5ad(data_dir)
+    train = data[data.obs.dataset != query]
+    test = data[data.obs.dataset == query]
+    
     # set up datamodule    
-    if dataset in ['symphony_tms','tms']:
-        datamodule = Intra_DataModule(data_dir = data_dir, cell_type_key = 'cell_ontology_class', batch_key = batch_key, num_workers=4, batch_size=batch_size, hvg = hvg,log_norm = log_norm, normalize = normalize)
-    else:
-        datamodule = Cross_DataModule(data_dir = data_dir, batch_key = batch_key, cell_type_key=cell_type_key, num_workers=4, batch_size=batch_size, query = query, hvg = hvg, log_norm = log_norm, normalize=normalize)
-
-    datamodule.setup(None)
+    datamodule = Cross_DataModule(train_data = train, cell_type_key=cell_type_key, num_workers=4, batch_key = batch_key, batch_size=batch_size, hvg = hvg,log_norm = log_norm, normalize = normalize)
+    datamodule.setup()
     N_CLASS = datamodule.N_CLASS
     N_FEATURES = datamodule.N_FEATURES
+    datamodule.test_data = test
 
     # Init ModelCheckpoint callback
     checkpointPath = checkpoint_path + dataset
-    print("Feature size =", datamodule.N_FEATURES)
-    # Train
 
+    # Train
     checkpoint_callback = ModelCheckpoint(
                                 monitor='Val_F1_score_median_CHC_epoch',
                                 dirpath=checkpointPath,
