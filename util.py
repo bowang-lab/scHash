@@ -40,10 +40,8 @@ def compute_metrics(query_dataloader, net, class_num, show_time=False, use_cpu=F
     # (1) labeling accuracy
     labeling_accuracy_CHC = compute_labeling_strategy_accuracy(labels_pred_CHC, labels_query.numpy())
     
-    # (2) F1_score, average = (micro, macro, weighted)
+    # (2) F1_score, average = (per class, weighted)
     F1_score_weighted_average_CHC = f1_score(labels_query, labels_pred_CHC, average='weighted')
-    F1_score_macro_CHC = f1_score(labels_query, labels_pred_CHC, average='macro')
-    F1_score_micro_CHC = f1_score(labels_query, labels_pred_CHC, average='micro')
     F1_score_per_class_CHC = f1_score(labels_query, labels_pred_CHC, average=None)
     target_names = [i for i in net.trainer.datamodule.label_mapping.keys()]
     class_report = classification_report(labels_query, labels_pred_CHC, labels=[i for i in range(len(target_names))], target_names=target_names)
@@ -171,7 +169,7 @@ def get_cell_anchors(n_class, bit):
                 sa = random.sample(list(range(bit)), bit // 2)
                 ones[sa] = -1
                 hash_targets[index] = ones
-            # to find average/min  pairwise distance
+            # to find average/min pairwise distance
             c = []
             for i in range(n_class):
                 for j in range(n_class):
@@ -187,6 +185,9 @@ def get_cell_anchors(n_class, bit):
                 print(c.min(), c.mean())
                 break
     return hash_targets
+
+################## -------------------------------------------------##############
+################## 从这里往下都是没用上的function ####################################
 
 def test_speed(dataloaders, net, size=280):
     # get data samples and evaluate them
@@ -385,39 +386,39 @@ def categorical_to_onehot(labels, numOfClass):
     labels = (labels == torch.arange(numOfClass).reshape(1, numOfClass)).int()
     return labels
 
-# T-sne visualizations
-def t_sne_visualization_2d(data, labels):
-    from sklearn.manifold import TSNE
-    from matplotlib import pyplot as plt
-    import matplotlib.cm as cm
+# # T-sne visualizations
+# def t_sne_visualization_2d(data, labels):
+#     from sklearn.manifold import TSNE
+#     from matplotlib import pyplot as plt
+#     import matplotlib.cm as cm
 
-    # Calculate TSNE embeded space
-    embedded_data = TSNE(n_components=2,
-                        n_iter=5000, 
-                        learning_rate=100,
-                        early_exaggeration=10,
-                        perplexity=50
-                        ).fit_transform(data)
+#     # Calculate TSNE embeded space
+#     embedded_data = TSNE(n_components=2,
+#                         n_iter=5000, 
+#                         learning_rate=100,
+#                         early_exaggeration=10,
+#                         perplexity=50
+#                         ).fit_transform(data)
 
-    # Visualization 
-    plt.figure(figsize=(6, 5))
+#     # Visualization 
+#     plt.figure(figsize=(6, 5))
 
-    # unique_classes = set(labels)
-    # colors = cm.rainbow(np.linspace(0, 1, len(unique_classes)))
+#     # unique_classes = set(labels)
+#     # colors = cm.rainbow(np.linspace(0, 1, len(unique_classes)))
     
-    # for label, c in zip(unique_classes, colors):
-    #     plt.scatter(embedded_data[labels == label, 0], 
-    #                 embedded_data[labels == label, 1], 
-    #                 linewidths=0.03,
-    #                 color=c, 
-    #                 label=label)
+#     # for label, c in zip(unique_classes, colors):
+#     #     plt.scatter(embedded_data[labels == label, 0], 
+#     #                 embedded_data[labels == label, 1], 
+#     #                 linewidths=0.03,
+#     #                 color=c, 
+#     #                 label=label)
         
-    plt.scatter(x = embedded_data[:,0], y = embedded_data[:,1], c = labels, s = 1.5, cmap='viridis')
-    plt.title('t-SNE visualization of hash code generation')
+#     plt.scatter(x = embedded_data[:,0], y = embedded_data[:,1], c = labels, s = 1.5, cmap='viridis')
+#     plt.title('t-SNE visualization of hash code generation')
 
-    plt.legend()
-    plt.show()
-    return
+#     plt.legend()
+#     plt.show()
+#     return
 
 def calculate_gene_grad(model):
     print("---Get gene grad---")
@@ -462,27 +463,27 @@ def calculate_gene_grad(model):
     print("shape = ", gradient_genes_per_cell_type.shape)
 
 
-def output_result(model):
-    print("Out put result for TM")
-    model.cuda()
-    binaries_train, labels_train = compute_result(model.trainer.datamodule.train_dataloader(), model)
-    binaries_val, labels_val = compute_result(model.trainer.datamodule.val_dataloader(), model)
-    binaries_database, labels_database = torch.cat([binaries_train, binaries_val]), torch.cat([labels_train, labels_val])
+# def output_result(model):
+#     print("Out put result for TM")
+#     model.cuda()
+#     binaries_train, labels_train = compute_result(model.trainer.datamodule.train_dataloader(), model)
+#     binaries_val, labels_val = compute_result(model.trainer.datamodule.val_dataloader(), model)
+#     binaries_database, labels_database = torch.cat([binaries_train, binaries_val]), torch.cat([labels_train, labels_val])
 
-    binaries_test, labels_test = compute_result(model.trainer.datamodule.test_dataloader(), model)
+#     binaries_test, labels_test = compute_result(model.trainer.datamodule.test_dataloader(), model)
 
-    binaries_database, labels_database = binaries_database.cpu(), labels_database.cpu()
-    binaries_test, labels_test = binaries_test.cpu(), labels_test.cpu()
+#     binaries_database, labels_database = binaries_database.cpu(), labels_database.cpu()
+#     binaries_test, labels_test = binaries_test.cpu(), labels_test.cpu()
 
-    print("binaries_database size =", binaries_database.shape)
-    print("binaries_test size =", binaries_test.shape)
+#     print("binaries_database size =", binaries_database.shape)
+#     print("binaries_test size =", binaries_test.shape)
 
-    binaries_database = pd.DataFrame(binaries_database.numpy())
-    labels_train = pd.DataFrame(labels_train.numpy())
-    binaries_test = pd.DataFrame(binaries_test.numpy())
-    labels_test = pd.DataFrame(labels_test.numpy())
+#     binaries_database = pd.DataFrame(binaries_database.numpy())
+#     labels_train = pd.DataFrame(labels_train.numpy())
+#     binaries_test = pd.DataFrame(binaries_test.numpy())
+#     labels_test = pd.DataFrame(labels_test.numpy())
 
-    binaries_database.to_csv('temp1.csv')
-    labels_train.to_csv('temp2.csv')
-    binaries_test.to_csv('temp3.csv')
-    labels_test.to_csv('temp4.csv')
+#     binaries_database.to_csv('temp1.csv')
+#     labels_train.to_csv('temp2.csv')
+#     binaries_test.to_csv('temp3.csv')
+#     labels_test.to_csv('temp4.csv')

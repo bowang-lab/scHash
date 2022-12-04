@@ -17,54 +17,10 @@ from dataModule import *
 import torch.multiprocessing
 torch.multiprocessing.set_sharing_strategy('file_system')
 
-def get_class_balance_loss_weight(samples_in_each_class, n_class, beta=0.9999):
-    # Class-Balanced Loss on Effective Number of Samples
-    # Reference Paper https://arxiv.org/abs/1901.05555
-    weight = (1 - beta)/(1 - torch.pow(beta, samples_in_each_class))
-    weight = weight / weight.sum() * n_class
-    return weight
-
-
-def test_class_balance_loss():
-    print("Testing class balance loss...")
-    # Sample 1
-    samples_in_each_class, n_class = torch.tensor([15, 10, 10, 10, 19]), 5
-    corr1 = torch.tensor(
-        [0.79511815, 1.1923454, 1.1923454, 1.1923454, 0.6278458])
-    ans1 = get_class_balance_loss_weight(samples_in_each_class, n_class)
-    if np.array_equal(corr1.numpy(), ans1.numpy()):
-        print("Test 1 passes")
-    else:
-        print("Test1 failed", "ans1 =", ans1.numpy(),
-              "correct1 =", corr1.numpy())
-
-    # Sample 2
-    samples_in_each_class, n_class = torch.tensor([1, 1, 1, 1, 1]), 5
-    corr2 = torch.tensor([1., 1., 1., 1., 1.])
-    ans2 = get_class_balance_loss_weight(samples_in_each_class, n_class)
-    if np.array_equal(corr2.numpy(), ans2.numpy()):
-        print("Test 2 passes")
-    else:
-        print("Test2 failed", "ans2 =", ans2.numpy(),
-              "correct2 =", corr2.numpy())
-
-    # Sample 3
-    samples_in_each_class, n_class = torch.tensor([1, 2, 4, 8, 16]), 5
-    corr3 = torch.tensor(
-        [2.5801828, 1.2904761, 0.64523804, 0.32269114, 0.16141175])
-    ans3 = get_class_balance_loss_weight(samples_in_each_class, n_class)
-    if np.array_equal(corr3.numpy(), ans3.numpy()):
-        print("Test 3 passes")
-    else:
-        print("Test3 failed", "ans3 =", ans3.numpy(),
-              "correct3 =", corr3.numpy())
-
-    return
-
 ###------------------------------Model---------------------------------------###
 
 class scHashModel(pl.LightningModule):
-    def __init__(self, n_class, n_features, batch_size=64, l_r=1e-5, lamb_da=0.0001, beta=0.9999, bit=64, lr_decay=0.9, decay_every=20, n_layers=5, weight_decay=0.0005, topK=-1):
+    def __init__(self, n_class, n_features, batch_size=64, l_r=1e-5, lamb_da=0.0001, beta=0.9999, bit=64, lr_decay=0.5, decay_every=20, n_layers=3, weight_decay=0.0001, topK=-1):
         super(scHashModel, self).__init__()
         print("hparam: l_r = {}, lambda = {}, beta = {}".format(l_r, lamb_da, beta))
         self.batch_size = batch_size
@@ -144,7 +100,7 @@ class scHashModel(pl.LightningModule):
             self.samples_in_each_class = self.trainer.datamodule.samples_in_each_class
             self.n_class = self.trainer.datamodule.N_CLASS
 
-        weight = get_class_balance_loss_weight(
+        weight = self.get_class_balance_loss_weight(
             self.samples_in_each_class, self.n_class, self.beta)
         weight = weight[labels]
         weight = weight.type_as(hash_codes)
@@ -181,8 +137,7 @@ class scHashModel(pl.LightningModule):
         val_matrics_CHC = compute_metrics(val_dataloader, self, self.n_class)
         (val_labeling_accuracy_CHC, 
         val_F1_score_weighted_average_CHC, val_F1_score_median_CHC, val_F1_score_per_class_CHC,
-        val_precision, val_recall,
-        nmi, ari, map_score, _) = val_matrics_CHC
+        val_precision, val_recall,  _) = val_matrics_CHC
 
         train_matrics_CHC = compute_metrics(train_dataloader, self, self.n_class)
         (_, 
@@ -198,10 +153,7 @@ class scHashModel(pl.LightningModule):
                     val_F1_score_per_class_CHC:{[f'{score:.3f}' for score in val_F1_score_per_class_CHC]}, \
                     val_precision:{val_precision:.3f}, \
                     val_recall:{val_recall:.3f}, \
-                    val_NMI: {nmi:.3f}, \
-                    val_ARI: {ari:.3f}, \
                     train_F1_score_median_CHC: {train_F1_score_median_CHC:.3f}")
-            print("map score =", map_score)
 
 
         value = {"step":self.current_epoch,
@@ -211,8 +163,6 @@ class scHashModel(pl.LightningModule):
                   "Val_F1_score_weighted_average_CHC_epoch": val_F1_score_weighted_average_CHC,
                   "Val_precision:" : val_precision,
                   "Val_recall:" : val_recall,
-                  "Val_NMI:" : nmi,
-                  "Val_ARI:" : ari,
                   "Train_F1_score_median_CHC:" : train_F1_score_median_CHC}
 
         self.log_dict(value, prog_bar=True, logger=True,on_epoch=True)
@@ -232,11 +182,10 @@ class scHashModel(pl.LightningModule):
 
         test_matrics_CHC = test_compute_metrics(test_dataloader, self, self.n_class, show_time=True, use_cpu=False, topK=self.topK)
         
-        (nmi,accuracy,precision,recall,f1,hashing_time, cell_assign_time, query_time, f1_median) = test_matrics_CHC
+        (accuracy,precision,recall,f1,hashing_time, cell_assign_time, query_time, f1_median) = test_matrics_CHC
         
 
-        value = {"Test_NMI": nmi,
-                 "Test_F1": f1,
+        value = {"Test_F1": f1,
                  "Test_F1_Median": f1_median,
                  "Test_precision" : precision,
                  "Test_recall" : recall,
@@ -400,9 +349,7 @@ if __name__ == '__main__':
     query_mem =  resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024**2 - cpu_mem
 
     result = trainer.callback_metrics
-    nmi = round(result['Test_NMI'].item(),3)
     p = round(result['Test_precision'].item(),3)
-    r = round(result['Test_NMI'].item(),3)
     f = round(result['Test_F1'].item(),3)
     h = round(result['Test_hashing_time'].item(),3)
     c = round(result['Test_cell_assign_time'].item(),3)
@@ -418,10 +365,10 @@ if __name__ == '__main__':
 
     
     if dataset in ['symphony_tms','tms','COVID19']:
-        result_table = result_table.append({'dataset':dataset,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c, 'NMI':nmi,'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':max_epochs,'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'f1_median':f1_median},ignore_index=True)
+        result_table = result_table.append({'dataset':dataset,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c,'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':max_epochs,'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'f1_median':f1_median},ignore_index=True)
     else:
-        result_table = result_table.append({'query_dataset':query,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c, 'NMI':nmi,'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':int(max_epochs),'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'batch_key':batch_key,'f1_median':f1_median},ignore_index=True)
+        result_table = result_table.append({'query_dataset':query,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c, 'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':int(max_epochs),'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'batch_key':batch_key,'f1_median':f1_median},ignore_index=True)
         
     
-    result_table = result_table.round({'ref_building_time':3, 'query_mapping_time':3, 'accuracy':3, 'hashing_time':3, 'NMI':3 ,'precision':3, 'recall':3, 'f1':3, 'f1_median':3, 'cell_assignment_time':3,})
+    result_table = result_table.round({'ref_building_time':3, 'query_mapping_time':3, 'accuracy':3, 'hashing_time':3,'precision':3, 'recall':3, 'f1':3, 'f1_median':3, 'cell_assignment_time':3,})
     result_table.to_csv(result_dir,index=False)

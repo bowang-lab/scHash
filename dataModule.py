@@ -14,6 +14,7 @@ import anndata as ad
 import random 
 import scanpy as sc
 ###------------------------------Utility function for DataLoader---------------------------------###
+# helper function
 # Perform stratified split on a dataset into two sets based on indices
 def stratified_split(remaining_indices, full_labels, set1_split_percentage,random_state=42):
     target_labels = [full_labels[i] for i in remaining_indices]
@@ -21,9 +22,18 @@ def stratified_split(remaining_indices, full_labels, set1_split_percentage,rando
         remaining_indices, train_size=set1_split_percentage, stratify=target_labels,random_state=random_state)
     return set1_indices, set2_indices
 
+# # 这个function现在没用到
+# # Split a full datasets in a stratified way into train, validation sets
+# def split_train_val_database_sets(full_dataset, train_idx, train_percentage):
+#     full_labels = full_dataset.labels
+#     full_indices = range(len(full_labels))
+
+#     train_indices, val_indices = stratified_split(train_idx, full_labels, train_percentage)
+#     train_set, val_set  = (Subset(full_dataset, train_indices), Subset(full_dataset, val_indices))
+    
+#     return train_set, val_set
+
 # Split a full datasets in a stratified way into test, train, validation and database sets
-
-
 def split_test_train_val_database_sets(full_dataset, train_percentage, val_percentage, test_percentage):
     full_labels = full_dataset.labels
     full_indices = range(len(full_labels))
@@ -39,18 +49,9 @@ def split_test_train_val_database_sets(full_dataset, train_percentage, val_perce
                                               Subset(full_dataset, test_indices))
     return TM_database, TM_train, TM_val, TM_test
 
-# Split a full datasets in a stratified way into train, validation sets
-def split_train_val_database_sets(full_dataset, train_idx, train_percentage):
-    full_labels = full_dataset.labels
-    full_indices = range(len(full_labels))
-
-    train_indices, val_indices = stratified_split(train_idx, full_labels, train_percentage)
-    train_set, val_set  = (Subset(full_dataset, train_indices), Subset(full_dataset, val_indices))
-    
-    return train_set, val_set
-
 def label_encoder(labels):
     labels = np.unique(labels).astype(str).tolist()
+    # allow unknown cases to happen
     if 'unknown' not in labels:
         labels.append('unknown')
         
@@ -74,7 +75,7 @@ def label_transform(label_dic,test_labels):
 
 class Cross_DataModule(pl.LightningDataModule):
 
-    def __init__(self, train_data, cell_type_key: str = 'cell_type', batch_key:str = '',batch_size=256, num_workers=2, hvg:bool = False, log_norm:bool = False, normalize:bool = False):
+    def __init__(self, train_data, cell_type_key: str = 'cell_type', batch_key:str = '',batch_size=64, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
         super().__init__()
         self.train_data = train_data
         self.batch_size = batch_size
@@ -88,8 +89,8 @@ class Cross_DataModule(pl.LightningDataModule):
         self.batch_key = batch_key
         self.data_val = None
         self.high_variable_genes = None
-        self.test_data = None
-        self.data_test = None
+        self.test_data = None # the raw AnnData Object for query
+        self.data_test = None # a transformed version of the test data that could fit into the model
 
     def setup(self, stage = None):
         # Step #1: Read in all labels and keep cells with count > 10
@@ -171,6 +172,7 @@ class Cross_DataModule(pl.LightningDataModule):
             if self.hvg:    
                 self.test_data = self.test_data[:,self.high_variable_genes].copy()
 
+            # # perform normalization
             if self.normalize:
                 scaler_test = StandardScaler(with_mean=False).fit(self.test_data.X)
                 self.test_data.var['means'] = scaler_test.mean_
@@ -189,23 +191,23 @@ class Cross_DataModule(pl.LightningDataModule):
         return DataLoader(self.data_test, batch_size=self.batch_size,
                           num_workers=self.num_workers)
     
-class CustomDataset(Dataset):
-    'A dataset base class for PyTorch Lightening'
+# class CustomDataset(Dataset):
+#     'A dataset base class for PyTorch Lightening'
 
-    def __init__(self, data, labels):
-        'Dataset Class Initialization'
-        # Number of data and labels should match
-        assert len(data) == len(labels)
-        self.labels = labels
-        self.data = data
+#     def __init__(self, data, labels):
+#         'Dataset Class Initialization'
+#         # Number of data and labels should match
+#         assert len(data) == len(labels)
+#         self.labels = labels
+#         self.data = data
 
-    def __len__(self):
-        'Returns the total number of samples'
-        return len(self.data)
+#     def __len__(self):
+#         'Returns the total number of samples'
+#         return len(self.data)
 
-    def __getitem__(self, index: int):
-        # Load data and get label
-        return self.data[index], self.labels[index]
+#     def __getitem__(self, index: int):
+#         # Load data and get label
+#         return self.data[index], self.labels[index]
 
 class SparseCustomDataset(Dataset):
     "A dataset base class for PyTorch Lightening"
