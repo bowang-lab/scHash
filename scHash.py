@@ -17,6 +17,13 @@ from dataModule import *
 import torch.multiprocessing
 torch.multiprocessing.set_sharing_strategy('file_system')
 
+def get_class_balance_loss_weight(samples_in_each_class, n_class, beta=0.9999):
+    # Class-Balanced Loss on Effective Number of Samples
+    # Reference Paper https://arxiv.org/abs/1901.05555
+    weight = (1 - beta)/(1 - torch.pow(beta, samples_in_each_class))
+    weight = weight / weight.sum() * n_class
+    return weight
+
 ###------------------------------Model---------------------------------------###
 
 class scHashModel(pl.LightningModule):
@@ -100,8 +107,7 @@ class scHashModel(pl.LightningModule):
             self.samples_in_each_class = self.trainer.datamodule.samples_in_each_class
             self.n_class = self.trainer.datamodule.N_CLASS
 
-        weight = self.get_class_balance_loss_weight(
-            self.samples_in_each_class, self.n_class, self.beta)
+        weight = self.get_class_balance_loss_weight(self.samples_in_each_class, self.n_class, self.beta)
         weight = weight[labels]
         weight = weight.type_as(hash_codes)
 
