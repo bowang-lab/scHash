@@ -11,7 +11,7 @@ import time
 import random
 
 # top-level interface for metric calculation
-def compute_metrics(query_dataloader, net, show_time=False, topK=-1):
+def compute_metrics(query_dataloader, net):
     ''' Labeling Strategy:
     Closest Cell Anchor:
     Label the query using the label associated to the nearest cell anchor
@@ -29,10 +29,10 @@ def compute_metrics(query_dataloader, net, show_time=False, topK=-1):
                                                         net.cell_anchors.numpy())
     CHC_duration = time.time() - start_time_CHC
     query_num = binaries_query.shape[0]
-    if show_time:
-        print("\n")
-        print("  - Time spent on annotating {} test data: {:.2f}s".format(query_num, CHC_duration))
-        print("  - CHC query speed: {:.2f} queries/s".format(query_num/CHC_duration))
+    # if show_time:
+    #     print("\n")
+    #     print("  - Time spent on annotating {} test data: {:.2f}s".format(query_num, CHC_duration))
+    #     print("  - CHC query speed: {:.2f} queries/s".format(query_num/CHC_duration))
     
     # (1) labeling accuracy
     labeling_accuracy_CHC = compute_labeling_strategy_accuracy(labels_pred_CHC, labels_query.numpy())
@@ -66,7 +66,7 @@ def compute_result(dataloader, net):
         labels.append(data[1])
     return torch.vstack(binariy_codes),torch.cat(labels)
 
-def test_compute_metrics(query_dataloader, net, show_time=False):
+def test_compute_metrics(query_dataloader, net):
     ''' Labeling Strategy:
     Closest Cell Anchor:
     Label the query using the label associated to the nearest cell anchor
@@ -100,10 +100,10 @@ def test_compute_metrics(query_dataloader, net, show_time=False):
     
     CHC_duration = time.time() - start_time_CHC
     query_num = binaries_query.shape[0]
-    if show_time:
-        print("\n")
-        print("  - Time spent on annotating {} test data: {:.2f}s".format(query_num, CHC_duration))
-        print("  - CHC query speed: {:.2f} queries/s".format(query_num/CHC_duration))
+#     if show_time:
+#         print("\n")
+#         print("  - Time spent on annotating {} test data: {:.2f}s".format(query_num, CHC_duration))
+#         print("  - CHC query speed: {:.2f} queries/s".format(query_num/CHC_duration))
     
     
     # (1) labeling accuracy
@@ -118,7 +118,7 @@ def test_compute_metrics(query_dataloader, net, show_time=False):
     precision = precision_score(labels_query, labels_pred_CHC, average="weighted")
     recall = recall_score(labels_query, labels_pred_CHC, average="weighted")
 
-    return labeling_accuracy,precision,recall,f1, hashing_time, cell_assign_time, query_time,f1_median
+    return labeling_accuracy,precision,recall,f1, hashing_time, cell_assign_time, query_time, f1_median
 
 # generate cell anchors
 def get_cell_anchors(n_class, bit):

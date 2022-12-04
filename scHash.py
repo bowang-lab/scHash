@@ -27,7 +27,7 @@ def get_class_balance_loss_weight(samples_in_each_class, n_class, beta=0.9999):
 ###------------------------------Model---------------------------------------###
 
 class scHashModel(pl.LightningModule):
-    def __init__(self, n_class, n_features, batch_size=64, l_r=1e-5, lamb_da=0.0001, beta=0.9999, bit=64, lr_decay=0.5, decay_every=20, n_layers=3, weight_decay=0.0001, topK=-1):
+    def __init__(self, n_class, n_features, batch_size=128, l_r=1.2e-5, lamb_da=0.001, beta=0.9999, bit=64, lr_decay=0.5, decay_every=100, weight_decay=0.0001, topK=-1):
         super(scHashModel, self).__init__()
         print("hparam: l_r = {}, lambda = {}, beta = {}".format(l_r, lamb_da, beta))
         self.batch_size = batch_size
@@ -40,50 +40,17 @@ class scHashModel(pl.LightningModule):
         self.decay_every = decay_every
         self.samples_in_each_class = None  # Later initialized in training step
         self.cell_anchors = get_cell_anchors(self.n_class, self.bit)
-        self.n_layers = n_layers
         self.weight_decay = weight_decay
         self.topK = topK
         ##### model structure ####
-        if n_layers == 5:
-            self.hash_layer = nn.Sequential(
-                nn.Linear(n_features, 9000),
-                nn.ReLU(inplace=True),
-                nn.Dropout(0.2),
-                nn.Linear(9000, 3150),
-                nn.ReLU(inplace=True),
-                nn.Dropout(0.2),
-                nn.Linear(3150, 900),
-                nn.ReLU(inplace=True),
-                nn.Dropout(0.2),
-                nn.Linear(900, 450),
-                nn.ReLU(inplace=True),
-                nn.Linear(450, 200),
-                nn.ReLU(inplace=True),
-                nn.Linear(200, self.bit),
+        self.hash_layer = nn.Sequential(
+            nn.Linear(n_features, 500),
+            nn.ReLU(),
+            nn.Dropout(),
+            nn.Linear(500, 250),
+            nn.ReLU(),
+            nn.Linear(250, self.bit),
             )
-        elif n_layers == 4:
-            self.hash_layer = nn.Sequential(
-                nn.Linear(n_features, 5000),
-                nn.ReLU(inplace=True),
-                nn.Dropout(0.2),
-                nn.Linear(5000, 2000),
-                nn.ReLU(inplace=True),
-                nn.Dropout(0.2),
-                nn.Linear(2000, 800),
-                nn.ReLU(inplace=True),
-                nn.Linear(800, 300),
-                nn.ReLU(inplace=True),
-                nn.Linear(300, self.bit),
-            )
-        elif n_layers == 3:
-            self.hash_layer = nn.Sequential(
-                nn.Linear(n_features, 500),
-                nn.ReLU(),
-                nn.Dropout(),
-                nn.Linear(500, 250),
-                nn.ReLU(),
-                nn.Linear(250, self.bit),
-                )
              
             
     def forward(self, x):
@@ -107,7 +74,7 @@ class scHashModel(pl.LightningModule):
             self.samples_in_each_class = self.trainer.datamodule.samples_in_each_class
             self.n_class = self.trainer.datamodule.N_CLASS
 
-        weight = self.get_class_balance_loss_weight(self.samples_in_each_class, self.n_class, self.beta)
+        weight = get_class_balance_loss_weight(self.samples_in_each_class, self.n_class, self.beta)
         weight = weight[labels]
         weight = weight.type_as(hash_codes)
 
@@ -140,16 +107,15 @@ class scHashModel(pl.LightningModule):
         val_dataloader = self.trainer.datamodule.val_dataloader()
         train_dataloader = self.trainer.datamodule.train_dataloader()
 
-        val_matrics_CHC = compute_metrics(val_dataloader, self, self.n_class)
+        val_matrics_CHC = compute_metrics(val_dataloader, self)
         (val_labeling_accuracy_CHC, 
         val_F1_score_weighted_average_CHC, val_F1_score_median_CHC, val_F1_score_per_class_CHC,
         val_precision, val_recall,  _) = val_matrics_CHC
 
-        train_matrics_CHC = compute_metrics(train_dataloader, self, self.n_class)
+        train_matrics_CHC = compute_metrics(train_dataloader, self)
         (_, 
         _, train_F1_score_median_CHC, _, _,
-        _, _,
-        _, _, _) = train_matrics_CHC
+        _, _) = train_matrics_CHC
 
         if not self.trainer.sanity_checking:
             print(f"Epoch: {self.current_epoch}, Val_loss_epoch: {val_loss_epoch:.2f}")
@@ -186,7 +152,7 @@ class scHashModel(pl.LightningModule):
         
         test_dataloader = self.trainer.datamodule.test_dataloader()
 
-        test_matrics_CHC = test_compute_metrics(test_dataloader, self, self.n_class, show_time=True, use_cpu=False, topK=self.topK)
+        test_matrics_CHC = test_compute_metrics(test_dataloader, self)
         
         (accuracy,precision,recall,f1,hashing_time, cell_assign_time, query_time, f1_median) = test_matrics_CHC
         
@@ -233,8 +199,6 @@ if __name__ == '__main__':
                         help="how many epochs a learning rate happens")
     parser.add_argument("--weight_decay", type=float, default=0.0001,
                         help="weight decay (L2 penalty)")
-    parser.add_argument("--n_layers", type=int, default=3,
-                        help="number of layers")
     # Training parameters
     parser.add_argument("--epochs", type=int, default=151,
                         help="number of epochs to run")
@@ -271,7 +235,6 @@ if __name__ == '__main__':
     lamb_da = args.lamb
     beta = args.beta
     weight_decay = args.weight_decay
-    n_layers = args.n_layers
 
     max_epochs = args.epochs
     dataset = args.dataset
@@ -325,8 +288,7 @@ if __name__ == '__main__':
                         )
     print("Number of Feature: ", N_FEATURES)
     model = scHashModel(N_CLASS, N_FEATURES, l_r=l_r, lamb_da=lamb_da,
-                        beta=beta, lr_decay=lr_decay, decay_every=decay_every,
-                        n_layers=n_layers, weight_decay=weight_decay, topK=topK)
+                        beta=beta, lr_decay=lr_decay, decay_every=decay_every,weight_decay=weight_decay, topK=topK)
 
     trainer.fit(model = model, datamodule = datamodule)
     ref_building = time.time()-start
@@ -344,8 +306,7 @@ if __name__ == '__main__':
     best_model = scHashModel.load_from_checkpoint(
         best_model_path, n_class=N_CLASS, n_features=N_FEATURES,
         l_r=l_r, lamb_da=lamb_da,
-        beta=beta, lr_decay=lr_decay, decay_every=decay_every,
-        n_layers=n_layers, weight_decay=weight_decay)
+        beta=beta, lr_decay=lr_decay, decay_every=decay_every,weight_decay=weight_decay)
         
     best_model.eval()
 
@@ -357,6 +318,7 @@ if __name__ == '__main__':
     result = trainer.callback_metrics
     p = round(result['Test_precision'].item(),3)
     f = round(result['Test_F1'].item(),3)
+    r = round(result['Test_recall'].item(),3)
     h = round(result['Test_hashing_time'].item(),3)
     c = round(result['Test_cell_assign_time'].item(),3)
     q = round(result['Test_query_time'].item(),3)
@@ -371,9 +333,9 @@ if __name__ == '__main__':
 
     
     if dataset in ['symphony_tms','tms','COVID19']:
-        result_table = result_table.append({'dataset':dataset,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c,'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':max_epochs,'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'f1_median':f1_median},ignore_index=True)
+        result_table = result_table.append({'dataset':dataset,'method':method,"accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c,'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':max_epochs,'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'f1_median':f1_median},ignore_index=True)
     else:
-        result_table = result_table.append({'query_dataset':query,'method':method,"layer_num":n_layers, "accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c, 'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':int(max_epochs),'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'batch_key':batch_key,'f1_median':f1_median},ignore_index=True)
+        result_table = result_table.append({'query_dataset':query,'method':method,"accuracy": a, "log_norm": log_norm, "hvg":hvg, 'ref_building_time': round(ref_building,3),'ref_building_gpu_memory(GB)': round(ref_memory,2),'ref_building_cpu_memory(GB)': round(cpu_mem,2), 'query_mapping_time':q, 'hashing_time':h, 'cell_assignment_time': c, 'precision':p,'recall':r,'f1':f,'top_genes_count':top_genes_count, 'normalize': normalize,'epoch':int(max_epochs),'batch_size':int(batch_size),'query_building_cpu_memory(GB)':round(query_mem,2),'batch_key':batch_key,'f1_median':f1_median},ignore_index=True)
         
     
     result_table = result_table.round({'ref_building_time':3, 'query_mapping_time':3, 'accuracy':3, 'hashing_time':3,'precision':3, 'recall':3, 'f1':3, 'f1_median':3, 'cell_assignment_time':3,})
