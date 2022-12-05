@@ -1,10 +1,17 @@
-# scHash - interpretable cell type annotation for atlas-level scRNA-seq datasets
+# scHash 
 scHash is an accurate, efficient, and interpretable deep hashing-based method that can build multi-million reference database and annotate tens of thousands of cells within seconds.
 
 
 ## :heavy_plus_sign: Method
-scHash consists of three sequential steps. (1) Cell anchor generation. scHash generates $K$-bit hash code for each unique cell type in the reference database, which is referred as ``cell anchors''. (2) Hash function training}. scHash trains a deep hash function that maps raw gene expression to $K$-bit binary hash code subject to weighted cell-anchor loss and quantization loss. (3) Interpretable cell type annotation. 
+scHash consists of three sequential steps:
 
+(1) Cell anchor generation. 
+scHash generates $K$-bit hash code for each unique cell type in the reference database, which is referred as "cell anchors". 
+
+(2) Hash function training. 
+scHash trains a deep hash function that maps raw gene expression to $K$-bit binary hash code subject to weighted cell-anchor loss and quantization loss. 
+
+(3) Interpretable cell type annotation. 
 scHash can efficiently annotate large-scale scRNA-seq dataset and offer interpretability for its annotation through the metadata of most similar reference cells and saliency map.
 
 <br><img src="img/overview.png"/>
@@ -20,13 +27,15 @@ $ pip install scHash
 
 ## Example Usage
 
-We demonstrate how scHash encode multiple datasets into hash codes for six public avaialble Pancreas datasets.
+We demonstrate how scHash encodes multiple datasets into hash codes for six public avaialble Pancreas datasets.
 
 The raw data for first five datasets can be obtained from [Harmony](https://github.com/immunogenomics/harmony2019/tree/master/data/figure5).
 
-The sixth Pancreas dataset Wang is public available at GSE83139.
+The sixth Pancreas dataset is from [(Wang et al, 2016)](https://diabetesjournals.org/diabetes/article/65/10/3028/34922/Single-Cell-Transcriptomics-of-the-Human-Endocrine) is public available at [GSE83139](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE83139).
 
 We compiled the six datasets into one AnnData object for easy demonstration. The processed data can be downloaded [here]().
+
+
 
 ```python
 # load required package
