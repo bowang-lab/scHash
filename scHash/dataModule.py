@@ -6,13 +6,15 @@ from torch.utils.data import DataLoader,  Subset, Dataset
 from torch.nn import functional as F
 from collections import Counter
 from scipy.sparse import csr_matrix
-
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 import anndata as ad
 import random 
 import scanpy as sc
+import warnings
+warnings.filterwarnings("ignore")
+
 ###------------------------------Utility function for DataLoader---------------------------------###
 # helper function
 # Perform stratified split on a dataset into two sets based on indices
@@ -21,17 +23,6 @@ def stratified_split(remaining_indices, full_labels, set1_split_percentage,rando
     set1_indices, set2_indices = train_test_split(
         remaining_indices, train_size=set1_split_percentage, stratify=target_labels,random_state=random_state)
     return set1_indices, set2_indices
-
-# # 这个function现在没用到
-# # Split a full datasets in a stratified way into train, validation sets
-# def split_train_val_database_sets(full_dataset, train_idx, train_percentage):
-#     full_labels = full_dataset.labels
-#     full_indices = range(len(full_labels))
-
-#     train_indices, val_indices = stratified_split(train_idx, full_labels, train_percentage)
-#     train_set, val_set  = (Subset(full_dataset, train_indices), Subset(full_dataset, val_indices))
-    
-#     return train_set, val_set
 
 # Split a full datasets in a stratified way into test, train, validation and database sets
 def split_test_train_val_database_sets(full_dataset, train_percentage, val_percentage, test_percentage):
@@ -73,9 +64,12 @@ def label_transform(label_dic,test_labels):
             test_transformed_labels.append(label_dic[i])
     return test_transformed_labels
 
+
+###------------------------------ DataLoader ---------------------------------###
+
 class Cross_DataModule(pl.LightningDataModule):
 
-    def __init__(self, train_data, cell_type_key: str = 'cell_type', batch_key:str = '',batch_size=64, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
+    def __init__(self, train_data, cell_type_key: str = 'cell_type', batch_key:str = '',batch_size=128, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
         super().__init__()
         self.train_data = train_data
         self.batch_size = batch_size
@@ -131,7 +125,7 @@ class Cross_DataModule(pl.LightningDataModule):
             full_data.X = self.scaler_train.transform(full_data.X)
 
         remaining_labels = full_data.obs[self.cell_type_key]
-        int_labels =  label_transform(self.label_mapping,remaining_labels)
+        int_labels =  label_transform(self.label_mapping, remaining_labels)
         full_labels = np.asarray(int_labels)
 
         # Step #3: Read in data based on selected label indices
@@ -146,7 +140,7 @@ class Cross_DataModule(pl.LightningDataModule):
         
         
         samples_in_each_class_dict = Counter([data[1] for data in self.data_train])
-        self.N_CLASS = len(samples_in_each_class_dict)
+        self.N_CLASS = len(self.label_mapping)
         self.samples_in_each_class = torch.zeros(self.N_CLASS)
         for index, count in samples_in_each_class_dict.items():
            self.samples_in_each_class[index] = count
@@ -184,31 +178,13 @@ class Cross_DataModule(pl.LightningDataModule):
                 self.test_data.X = csr_matrix((A + np.diag(b) * self.test_data.X.T).astype(np.float32).T)
                 self.test_data.X = self.scaler_train.transform(self.test_data.X) 
 
-            test_labels = label_transform(self.label_mapping,self.test_data.obs[self.cell_type_key ])
+            test_labels = label_transform(self.label_mapping, self.test_data.obs[self.cell_type_key])
             self.data_test = SparseCustomDataset(data=self.test_data.X, labels=np.asarray(test_labels))
 
     
         return DataLoader(self.data_test, batch_size=self.batch_size,
                           num_workers=self.num_workers)
     
-# class CustomDataset(Dataset):
-#     'A dataset base class for PyTorch Lightening'
-
-#     def __init__(self, data, labels):
-#         'Dataset Class Initialization'
-#         # Number of data and labels should match
-#         assert len(data) == len(labels)
-#         self.labels = labels
-#         self.data = data
-
-#     def __len__(self):
-#         'Returns the total number of samples'
-#         return len(self.data)
-
-#     def __getitem__(self, index: int):
-#         # Load data and get label
-#         return self.data[index], self.labels[index]
-
 class SparseCustomDataset(Dataset):
     "A dataset base class for PyTorch Lightening"
 
