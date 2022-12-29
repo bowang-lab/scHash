@@ -3,13 +3,12 @@ import torch
 import pytorch_lightning as pl
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader,  Subset, Dataset
-from torch.nn import functional as F
 from collections import Counter
 from scipy.sparse import csr_matrix
+
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-import anndata as ad
 import random 
 import scanpy as sc
 import warnings
@@ -42,7 +41,6 @@ def split_test_train_val_database_sets(full_dataset, train_percentage, val_perce
 
 def label_encoder(labels):
     labels = np.unique(labels).astype(str).tolist()
-    # allow unknown cases to happen
     if 'unknown' not in labels:
         labels.append('unknown')
         
@@ -64,12 +62,9 @@ def label_transform(label_dic,test_labels):
             test_transformed_labels.append(label_dic[i])
     return test_transformed_labels
 
-
-###------------------------------ DataLoader ---------------------------------###
-
 class Cross_DataModule(pl.LightningDataModule):
 
-    def __init__(self, train_data, cell_type_key: str = 'cell_type', batch_key:str = '',batch_size=128, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
+    def __init__(self, train_data, cell_type_key:str = 'cell_type', batch_key: str = '', batch_size=64, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
         super().__init__()
         self.train_data = train_data
         self.batch_size = batch_size
@@ -79,111 +74,115 @@ class Cross_DataModule(pl.LightningDataModule):
         self.hvg = hvg
         self.log_norm = log_norm
         self.normalize = normalize
+        self.data_train = None
+        self.data_test = None
+        self.test_data = None
+        
         self.cell_type_key = cell_type_key
         self.batch_key = batch_key
-        self.data_val = None
-        self.high_variable_genes = None
-        self.test_data = None # the raw AnnData Object for query
-        self.data_test = None # a transformed version of the test data that could fit into the model
 
-    def setup(self, stage = None):
-        # Step #1: Read in all labels and keep cells with count > 10
-        full_data = self.train_data
-        unique = np.unique(full_data.obs[self.cell_type_key],return_counts=True)
-        idx  = [unique[1]<10]
-        classes = unique[0][idx]
-        full_data = full_data[~full_data.obs[self.cell_type_key].isin(classes),]
-        
-        if  self.hvg:
-            self.N_FEATURES = 1000
-        else:
-            self.N_FEATURES = full_data.X.shape[1]
-            
-        remaining_labels = full_data.obs[self.cell_type_key]
+    def setup(self, stage):
+        if  self.data_train == None:
+            # Step #1: Read in all labels and keep cells with count > 6
+            full_data = self.train_data.copy()
+            unique = np.unique(full_data.obs[self.cell_type_key],return_counts=True)
+            idx  = [unique[1]<6]
+            classes = unique[0][idx]
+            full_data = full_data[~full_data.obs[self.cell_type_key].isin(classes),].copy()
 
-        # Step #2: Turning string class labels into int labels and store the mapping
-        self.label_mapping = label_encoder(remaining_labels)
-        
-        if self.log_norm:
-            full_data.X.data = np.log10(full_data.X.data+1).astype(np.float32)
-
-        # # hvg selection
-        if self.hvg:
-            if self.batch_key:
-                sc.pp.highly_variable_genes(full_data,n_top_genes=1000,batch_key=self.batch_key,flavor='seurat_v3')
+            if self.log_norm:
+                full_data.X.data = np.log10(full_data.X.data+1).astype(np.float32)
+            ## hvg selection
+            if self.hvg:
+                self.N_FEATURES = 1000
+                if self.batch_key:
+                    sc.pp.highly_variable_genes(full_data,n_top_genes=1000,batch_key=self.batch_key,flavor='seurat_v3')
+                else:
+                    sc.pp.highly_variable_genes(full_data,n_top_genes=1000,flavor='seurat_v3')
+                    
+                self.highly_variable_genes = full_data.var['highly_variable'].values
+                full_data = full_data[:,self.highly_variable_genes].copy()
             else:
-                sc.pp.highly_variable_genes(full_data,n_top_genes=1000, flavor='seurat_v3')
+                self.N_FEATURES = full_data.X.shape[1]
 
-            self.high_variable_genes = full_data.var['highly_variable'].values
-            full_data = full_data[:, self.high_variable_genes].copy()
+            if self.normalize:
+                self.scaler_train = StandardScaler(with_mean=False).fit(full_data.X)
+                full_data.X = self.scaler_train.transform(full_data.X)
 
-        if self.normalize:
-            self.scaler_train = StandardScaler(with_mean=False).fit(full_data.X)
-            full_data.var['means'] = self.scaler_train.mean_
-            full_data.var['std'] = self.scaler_train.scale_
-            # full_data.X = csr_matrix(((full_data.X - full_data.var.means.values)/full_data.var['std'].values).astype(np.float32))
-            full_data.X = self.scaler_train.transform(full_data.X)
+                self.train_mean = self.scaler_train.mean_
+                self.train_std = self.scaler_train.scale_
 
-        remaining_labels = full_data.obs[self.cell_type_key]
-        int_labels =  label_transform(self.label_mapping, remaining_labels)
-        full_labels = np.asarray(int_labels)
 
-        # Step #3: Read in data based on selected label indices
-        full_dataset = SparseCustomDataset(data=full_data.X, labels=full_labels)
+            full_labels = full_data.obs[self.cell_type_key]
+            remaining_labels = full_data.obs[self.cell_type_key]
 
-        full_indices = range(len(full_labels))
-        train_indices, val_indices = stratified_split(full_indices, full_labels, 0.8)
-        self.data_train, self.data_val = (Subset(full_dataset,
-                                                     train_indices),
-                                              Subset(full_dataset,
-                                                     val_indices))
-        
-        
-        samples_in_each_class_dict = Counter([data[1] for data in self.data_train])
-        self.N_CLASS = len(self.label_mapping)
-        self.samples_in_each_class = torch.zeros(self.N_CLASS)
-        for index, count in samples_in_each_class_dict.items():
-           self.samples_in_each_class[index] = count
-        
+            # Step #2: Turning string class labels into int labels and store the mapping
+            self.label_mapping = label_encoder(remaining_labels)
+
+            int_labels = label_transform(self.label_mapping,remaining_labels)
+
+            self.N_CLASS = int(np.unique(int_labels)[0])+1
+            full_labels = np.asarray(int_labels)
+            remaining_labels = None
+            int_labels = None
+
+            # Step #3: Read in data based on selected label indices
+            full_dataset = SparseCustomDataset(data=full_data.X, labels=full_labels)
+
+
+            random.seed(42)    
+            full_indices = range(len(full_labels))
+            train_indices, val_indices = stratified_split(full_indices, full_labels, 0.8)
+            self.data_train, self.data_val = (Subset(full_dataset,
+                                                         train_indices),
+                                                  Subset(full_dataset,
+                                                         val_indices))
+
+            # Calculate sample count in each class for training dataset
+            samples_in_each_class_dict = Counter([data[1] for data in self.data_train])
+
+            self.N_CLASS = len(samples_in_each_class_dict)
+            self.samples_in_each_class = torch.zeros(self.N_CLASS)
+            for index, count in samples_in_each_class_dict.items():
+               self.samples_in_each_class[index] = count
+
 
     def train_dataloader(self):
-        
         return DataLoader(self.data_train, batch_size=self.batch_size,
                           shuffle=True, num_workers=self.num_workers)
 
     def val_dataloader(self):
-
-        return DataLoader(self.data_val, batch_size=self.batch_size, shuffle=True,
+        return DataLoader(self.data_val, batch_size=self.batch_size,
                           num_workers=self.num_workers)
 
-    
     def test_dataloader(self):
         if self.data_test == None:
+            data_test = self.test_data.copy()
             if self.log_norm:
-                self.test_data.X.data = np.log10(self.test_data.X.data+1).astype(np.float32)
-
-            # # hvg selection
-            if self.hvg:    
-                self.test_data = self.test_data[:,self.high_variable_genes].copy()
-
-            # # perform normalization
+                data_test.X.data = np.log10(data_test.X.data+1).astype(np.float32)
+            if self.hvg:
+                data_test = data_test[:,self.highly_variable_genes].copy()
+                
             if self.normalize:
-                scaler_test = StandardScaler(with_mean=False).fit(self.test_data.X)
-                self.test_data.var['means'] = scaler_test.mean_
-                self.test_data.var['std'] = scaler_test.scale_
+                scaler_test = StandardScaler(with_mean=False).fit(data_test.X)
+                data_test.var['means'] = scaler_test.mean_
+                data_test.var['std'] = scaler_test.scale_
 
-                b = (self.scaler_train.scale_/self.test_data.var['std'])
-                a = (self.scaler_train.mean_ - b*self.test_data.var['means'])
-                A = np.tile(a.to_numpy().reshape(self.test_data.X.shape[1],1),self.test_data.X.shape[0])
-                self.test_data.X = csr_matrix((A + np.diag(b) * self.test_data.X.T).astype(np.float32).T)
-                self.test_data.X = self.scaler_train.transform(self.test_data.X) 
-
-            test_labels = label_transform(self.label_mapping, self.test_data.obs[self.cell_type_key])
-            self.data_test = SparseCustomDataset(data=self.test_data.X, labels=np.asarray(test_labels))
-
-    
+                b = (self.train_std /data_test.var['std'])
+                a = (self.train_mean - b*data_test.var['means'])
+                A = np.tile(a.to_numpy().reshape(data_test.X.shape[1],1),data_test.X.shape[0])
+                data_test.X = csr_matrix((A + np.diag(b) * data_test.X.T).astype(np.float32).T)
+                data_test.X = self.scaler_train.transform(data_test.X)
+            
+            test_labels = label_transform(self.label_mapping,data_test.obs[self.cell_type_key])
+            self.data_test = SparseCustomDataset(data=data_test.X, labels=np.asarray(test_labels))
+            
         return DataLoader(self.data_test, batch_size=self.batch_size,
                           num_workers=self.num_workers)
+    
+    def setup_test_data(self, test_data):
+        self.test_data = test_data
+    
     
 class SparseCustomDataset(Dataset):
     "A dataset base class for PyTorch Lightening"
