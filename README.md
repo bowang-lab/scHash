@@ -51,54 +51,21 @@ data = ad.read_h5ad(data_dir)
 # Split the reference and query data. 
 # We use Segerstolpe(smartseq) for query as demonstration. 
 # You could specify your query datasets.
-train = data[data.obs.dataset != 'smartseq']
-test = data[data.obs.dataset == 'smartseq']
-
-# set up datamodule
-# the Cross_DataModule takes an anndata object for the input.
-# Both reference and query need to be stores in this format to be used for scHash.
-datamodule = Cross_DataModule(train_data = train, cell_type_key='cell_type')
-datamodule.setup()
-N_CLASS = datamodule.N_CLASS
-N_FEATURES = datamodule.N_FEATURES
+datamodule = scHash.util.setup_training_data(train_data = train,cell_type_key = 'cell_type', batch_key = 'dataset')
 
 # set the query data
-# this can be also set after train
-datamodule.test_data = test
+# this can be also done after train
+datamodule.setup_test_data(test)
 
-
-# Init ModelCheckpoint callback
+# Define a model output path
 checkpointPath = '../checkpoint/'
 
-# Defining Training Model
-checkpoint_callback = ModelCheckpoint(
-                            monitor='Val_F1_score_median_CHC_epoch',
-                            dirpath=checkpointPath,
-                            filename='scHash-{epoch:02d}-{Val_F1_score_median_CHC_epoch:.3f}',
-                            verbose=True,
-                            # save_last = True,
-                            mode='max'
-                            )
-early_stopping_callback = EarlyStopping(monitor="Val_F1_score_median_CHC_epoch")
-start = time.time()
-trainer = pl.Trainer(max_epochs=200,
-                    gpus=1,
-                    check_val_every_n_epoch=10,
-                    progress_bar_refresh_rate=50,
-                    callbacks=[checkpoint_callback]
-                    )
-print("Number of Feature: ", N_FEATURES)
-model = scHashModel(N_CLASS, N_FEATURES)
-
-# Train and Fit the Model
-trainer.fit(model = model, datamodule = datamodule)
+# Init the model and Train it
+model = scHash.scHashModel(datamodule)
+trainer, best_model_path = scHash.util.training(model = model, datamodule = datamodule, checkpointPath = checkpointPath, max_epochs = 50)
 
 # Test the best model
-best_model_path = checkpoint_callback.best_model_path
-best_model = scHashModel.load_from_checkpoint(best_model_path, n_class=N_CLASS,n_features=N_FEATURES)
-
-# Test the model with the query data
-trainer.test(model=best_model, datamodule=datamodule)
+scHash.util.testing(trainer, model, best_model_path, datamodule)
 ```
 
 

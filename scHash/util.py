@@ -6,8 +6,42 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import f1_score, precision_score, recall_score
 from sklearn.metrics import classification_report
+from .dataModule import *
+from pytorch_lightning.callbacks import ModelCheckpoint
 import time
 import random
+
+# helper func
+def training(model, datamodule, checkpointPath, filename:str = 'scHash-{epoch:02d}-{Val_F1_score_median_CHC_epoch:.3f}', max_epochs = 200):
+    checkpoint_callback = ModelCheckpoint(
+                                monitor='Val_F1_score_median_CHC_epoch',
+                                dirpath=checkpointPath,
+                                filename=filename,
+                                verbose=True,
+                                mode='max'
+                                )
+
+    trainer = pl.Trainer(max_epochs=max_epochs,
+                        gpus=1,
+                        check_val_every_n_epoch=10,
+                        progress_bar_refresh_rate=0,
+                        callbacks=[checkpoint_callback]
+                        )
+
+    trainer.fit(model = model, datamodule = datamodule)
+    
+    return trainer, checkpoint_callback.best_model_path
+
+def testing(trainer, model, best_model_path, datamodule):
+    # Test the best model
+    best_model = model.load_from_checkpoint(best_model_path, datamodule=datamodule)
+    best_model.eval()
+    trainer.test(model=best_model, datamodule=datamodule)
+
+def setup_training_data(train_data, cell_type_key:str = 'cell_type', batch_key: str = '', batch_size=128, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
+    datamodule = Cross_DataModule(train_data = train_data, cell_type_key = cell_type_key, batch_key = batch_key, num_workers=num_workers, batch_size=batch_size, log_norm = log_norm, hvg = hvg, normalize = normalize)
+    datamodule.setup(None)
+    return datamodule
 
 # top-level interface for metric calculation
 def compute_metrics(query_dataloader, net):
@@ -73,7 +107,6 @@ def test_compute_metrics(query_dataloader, net):
     # binaries_query, labels_query = compute_result(query_dataloader, net)
     binaries_query,labels_query = compute_result(query_dataloader, net)
     hashing_time = time.time() - start
-    print("################### compute_result time: ", hashing_time)
     ######################## modified here    
     
     start = time.time() 
@@ -82,8 +115,6 @@ def test_compute_metrics(query_dataloader, net):
     cell_assign_time = time.time() - start
     
     query_time = cell_assign_time+hashing_time
-    print("################### cell_assign time: ",cell_assign_time)
-    print("################### query time: ",query_time)
        
     # (1) labeling accuracy
     labeling_accuracy = compute_labeling_strategy_accuracy(labels_pred_CHC, labels_query.numpy())

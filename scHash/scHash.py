@@ -2,10 +2,10 @@ import torch
 from torch import nn
 import pytorch_lightning as pl
 from torch.optim import lr_scheduler
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 import torch.multiprocessing
+from .util import *
 torch.multiprocessing.set_sharing_strategy('file_system')
+
 
 def get_class_balance_loss_weight(samples_in_each_class, n_class, beta=0.9999):
     # Class-Balanced Loss on Effective Number of Samples
@@ -17,13 +17,13 @@ def get_class_balance_loss_weight(samples_in_each_class, n_class, beta=0.9999):
 ###------------------------------Model---------------------------------------###
 
 class scHashModel(pl.LightningModule):
-    def __init__(self, n_class, n_features, batch_size=128, l_r=1.2e-5, lamb_da=0.001, beta=0.9999, bit=64, lr_decay=0.5, decay_every=100, weight_decay=0.0001, topK=-1):
+    def __init__(self, datamodule, batch_size=128, l_r=1.2e-5, lamb_da=0.001, beta=0.9999, bit=64, lr_decay=0.5, decay_every=100, weight_decay=0.0001, topK=-1):
         super(scHashModel, self).__init__()
-        print("hparam: l_r = {}, lambda = {}, beta = {}".format(l_r, lamb_da, beta))
         self.batch_size = batch_size
         self.l_r = l_r
         self.bit = bit
-        self.n_class = n_class
+        self.n_class = datamodule.N_CLASS
+        self.n_features = datamodule.N_FEATURES
         self.lamb_da = lamb_da
         self.beta = beta
         self.lr_decay = lr_decay
@@ -31,10 +31,11 @@ class scHashModel(pl.LightningModule):
         self.samples_in_each_class = None  # Later initialized in training step
         self.cell_anchors = get_cell_anchors(self.n_class, self.bit)
         self.weight_decay = weight_decay
+        self.datamodule = None
 
         ##### model structure ####
         self.hash_layer = nn.Sequential(
-            nn.Linear(n_features, 500),
+            nn.Linear(self.n_features, 500),
             nn.ReLU(),
             nn.Dropout(),
             nn.Linear(500, 250),
@@ -109,13 +110,6 @@ class scHashModel(pl.LightningModule):
         if self.current_epoch % 49 == 0:
             if not self.trainer.sanity_checking:
                 print(f"Epoch: {self.current_epoch}, Val_loss_epoch: {val_loss_epoch:.2f}")
-                print(f"val_F1_score_median_CHC:{val_F1_score_median_CHC:.3f}, \
-                        val_labeling_accuracy_CHC:{val_labeling_accuracy_CHC:.3f},\
-                        val_F1_score_weighted_average_CHC:{val_F1_score_weighted_average_CHC:.3f},\
-                        val_F1_score_per_class_CHC:{[f'{score:.3f}' for score in val_F1_score_per_class_CHC]}, \
-                        val_precision:{val_precision:.3f}, \
-                        val_recall:{val_recall:.3f}, \
-                        train_F1_score_median_CHC: {train_F1_score_median_CHC:.3f}")
 
 
         value = {"step":self.current_epoch,
@@ -168,3 +162,5 @@ class scHashModel(pl.LightningModule):
             optimizer, step_size=self.decay_every, gamma=self.lr_decay)
 
         return [optimizer], [exp_lr_scheduler]
+
+
