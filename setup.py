@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '1.1'
+VERSION = '1.3'
 DESCRIPTION = 'scHash package for scRNA-seq data integration'
 LONG_DESCRIPTION = 'A package that could integrate atlas-level scRNA-seq datasets with multi-million reference database and annotate tens of thousands of cells within seconds.'
 
@@ -19,7 +19,7 @@ setup(
         "torch>=1.0.0",
         "pytorch-lightning>=1.6.5",
         "scipy>=1.8.0",
-        "numpy>=1.22.2",
+        "numpy>=1.22.1",
         "scikit-learn>=1.0.2",
         "pandas>=1.1.0",
         "anndata>=0.8.0",

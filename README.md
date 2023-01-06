@@ -51,7 +51,7 @@ data = ad.read_h5ad(data_dir)
 # Split the reference and query data. 
 # We use Segerstolpe(smartseq) for query as demonstration. 
 # You could specify your query datasets.
-datamodule = scHash.util.setup_training_data(train_data = train,cell_type_key = 'cell_type', batch_key = 'dataset')
+datamodule = scHash.setup_training_data(train_data = train,cell_type_key = 'cell_type', batch_key = 'dataset')
 
 # set the query data
 # this can be also done after train
@@ -62,10 +62,10 @@ checkpointPath = '../checkpoint/'
 
 # Init the model and Train it
 model = scHash.scHashModel(datamodule)
-trainer, best_model_path = scHash.util.training(model = model, datamodule = datamodule, checkpointPath = checkpointPath, max_epochs = 50)
+trainer, best_model_path = scHash.training(model = model, datamodule = datamodule, checkpointPath = checkpointPath, max_epochs = 50)
 
 # Test the best model
-scHash.util.testing(trainer, model, best_model_path, datamodule)
+scHash.testing(trainer, model, best_model_path, datamodule)
 ```
 
 

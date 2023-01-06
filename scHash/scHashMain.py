@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 from torch.optim import lr_scheduler
 import torch.multiprocessing
 from .util import *
+from pytorch_lightning.callbacks import ModelCheckpoint
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
@@ -17,7 +18,7 @@ def get_class_balance_loss_weight(samples_in_each_class, n_class, beta=0.9999):
 ###------------------------------Model---------------------------------------###
 
 class scHashModel(pl.LightningModule):
-    def __init__(self, datamodule, batch_size=128, l_r=1.2e-5, lamb_da=0.001, beta=0.9999, bit=64, lr_decay=0.5, decay_every=100, weight_decay=0.0001, topK=-1):
+    def __init__(self, datamodule, batch_size=128, l_r=1.2e-5, lamb_da=0.001, beta=0.9999, bit=64, lr_decay=0.5, decay_every=100, weight_decay=0.0001):
         super(scHashModel, self).__init__()
         self.batch_size = batch_size
         self.l_r = l_r
@@ -141,14 +142,14 @@ class scHashModel(pl.LightningModule):
         (accuracy,precision,recall,f1,hashing_time, cell_assign_time, query_time, f1_median) = test_matrics_CHC
         
 
-        value = {"Test_F1": f1,
-                 "Test_F1_Median": f1_median,
-                 "Test_precision" : precision,
-                 "Test_recall" : recall,
-                "Test_hashing_time": hashing_time,
-                "Test_cell_assign_time": cell_assign_time,
-                'Test_query_time': query_time,
-                'Test_accuracy':accuracy }
+        value = {"F1": f1,
+                 "F1_Median": f1_median,
+                 "Precision" : precision,
+                 "Recall" : recall,
+                # "Test_hashing_time": hashing_time,
+                # "Test_cell_assign_time": cell_assign_time,
+                # 'Test_query_time': query_time,
+                'Accuracy':accuracy }
 
         self.log_dict(value, prog_bar=True, logger=True,on_epoch=True)
 
@@ -164,3 +165,34 @@ class scHashModel(pl.LightningModule):
         return [optimizer], [exp_lr_scheduler]
 
 
+# helper func
+def training(model, datamodule, checkpointPath, filename:str = 'scHash-{epoch:02d}-{Val_F1_score_median_CHC_epoch:.3f}', max_epochs = 200):
+    checkpoint_callback = ModelCheckpoint(
+                                monitor='Val_F1_score_median_CHC_epoch',
+                                dirpath=checkpointPath,
+                                filename=filename,
+                                verbose=True,
+                                mode='max'
+                                )
+
+    trainer = pl.Trainer(max_epochs=max_epochs,
+                        gpus=1,
+                        check_val_every_n_epoch=10,
+                        progress_bar_refresh_rate=0,
+                        callbacks=[checkpoint_callback]
+                        )
+
+    trainer.fit(model = model, datamodule = datamodule)
+    
+    return trainer, checkpoint_callback.best_model_path
+
+def testing(trainer, model, best_model_path, datamodule):
+    # Test the best model
+    best_model = scHashModel.load_from_checkpoint(best_model_path, datamodule=datamodule, l_r=model.l_r, lamb_da=model.lamb_da, beta=model.beta, bit=model.bit, lr_decay=model.lr_decay, decay_every=model.decay_every, weight_decay=model.weight_decay)
+    best_model.eval()
+    trainer.test(model=best_model, datamodule=datamodule)
+
+def setup_training_data(train_data, cell_type_key:str = 'cell_type', batch_key: str = '', batch_size=128, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
+    datamodule = Cross_DataModule(train_data = train_data, cell_type_key = cell_type_key, batch_key = batch_key, num_workers=num_workers, batch_size=batch_size, log_norm = log_norm, hvg = hvg, normalize = normalize)
+    datamodule.setup(None)
+    return datamodule
