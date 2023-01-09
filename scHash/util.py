@@ -59,6 +59,17 @@ def compute_result(dataloader, net):
         labels.append(data[1])
     return torch.vstack(binariy_codes),torch.cat(labels)
 
+def compute_labels(query_dataloader, net):
+    start = time.time()
+    binaries_query,labels_query = compute_result(query_dataloader, net) 
+    
+    start = time.time() 
+    labels_pred_CHC = get_labels_pred_closest_cell_anchor(binaries_query.cpu().numpy(), labels_query.numpy(),
+                                                        net.cell_anchors.numpy())
+    query_time = time.time() - start
+    return labels_pred_CHC, labels_query.numpy(), query_time
+
+
 def test_compute_metrics(query_dataloader, net):
     ''' Labeling Strategy:
     Closest Cell Anchor:
@@ -96,7 +107,7 @@ def test_compute_metrics(query_dataloader, net):
     precision = precision_score(labels_query, labels_pred_CHC, average="weighted")
     recall = recall_score(labels_query, labels_pred_CHC, average="weighted")
 
-    return labeling_accuracy,precision,recall,f1, hashing_time, cell_assign_time, query_time, f1_median
+    return labeling_accuracy,precision,recall,f1, hashing_time, cell_assign_time, query_time, f1_median, labels_pred_CHC, labels_query
 
 # generate cell anchors
 def get_cell_anchors(n_class, bit):

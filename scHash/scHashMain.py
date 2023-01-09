@@ -5,6 +5,7 @@ from torch.optim import lr_scheduler
 import torch.multiprocessing
 from .util import *
 from pytorch_lightning.callbacks import ModelCheckpoint
+import time
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
@@ -33,6 +34,8 @@ class scHashModel(pl.LightningModule):
         self.cell_anchors = get_cell_anchors(self.n_class, self.bit)
         self.weight_decay = weight_decay
         self.datamodule = None
+        self.pred_labels = None
+        self.test_true_labels = None
 
         ##### model structure ####
         self.hash_layer = nn.Sequential(
@@ -133,25 +136,25 @@ class scHashModel(pl.LightningModule):
         return loss
 
     def test_epoch_end(self, outputs):
-        test_loss_epoch = torch.stack([x for x in outputs]).mean()
-        
         test_dataloader = self.trainer.datamodule.test_dataloader()
 
-        test_matrics_CHC = test_compute_metrics(test_dataloader, self)
+        # test_matrics_CHC = test_compute_metrics(test_dataloader, self)
+        labels_pred_CHC, labels_true, query_time = compute_labels(test_dataloader, self)
         
-        (accuracy,precision,recall,f1,hashing_time, cell_assign_time, query_time, f1_median) = test_matrics_CHC
-        
+        # (accuracy,precision,recall,f1,hashing_time, cell_assign_time, query_time, f1_median, labels_pred_CHC, labels_true) = test_matrics_CHC
+        self.pred_labels = labels_pred_CHC
+        self.test_true_labels = labels_true.numpy()
 
-        value = {"F1": f1,
-                 "F1_Median": f1_median,
-                 "Precision" : precision,
-                 "Recall" : recall,
-                # "Test_hashing_time": hashing_time,
-                # "Test_cell_assign_time": cell_assign_time,
-                # 'Test_query_time': query_time,
-                'Accuracy':accuracy }
+        # value = {"F1": f1,
+        #          "F1_Median": f1_median,
+        #          "Precision" : precision,
+        #          "Recall" : recall,
+        #         # "Test_hashing_time": hashing_time,
+        #         # "Test_cell_assign_time": cell_assign_time,
+        #         'Query_time': query_time,
+        #         'Accuracy':accuracy}
 
-        self.log_dict(value, prog_bar=True, logger=True,on_epoch=True)
+        # self.log_dict(value, prog_bar=True, logger=True,on_epoch=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
@@ -182,15 +185,28 @@ def training(model, datamodule, checkpointPath, filename:str = 'scHash-{epoch:02
                         callbacks=[checkpoint_callback]
                         )
 
+    start = time.time()
     trainer.fit(model = model, datamodule = datamodule)
-    
-    return trainer, checkpoint_callback.best_model_path
+    training_time = time.time()-start
 
-def testing(trainer, model, best_model_path, datamodule):
+    return trainer, checkpoint_callback.best_model_path, training_time
+
+def testing(trainer, model, best_model_path, datamodule, record_time = False):
     # Test the best model
     best_model = scHashModel.load_from_checkpoint(best_model_path, datamodule=datamodule, l_r=model.l_r, lamb_da=model.lamb_da, beta=model.beta, bit=model.bit, lr_decay=model.lr_decay, decay_every=model.decay_every, weight_decay=model.weight_decay)
     best_model.eval()
+
+    start = time.time()
     trainer.test(model=best_model, datamodule=datamodule)
+    label_map = {v: k for k, v in datamodule.label_mapping.items()}
+    pred_labels = [label_map[i] for i in best_model.pred_labels]
+    processed_true_labels = [label_map[i] for i in best_model.test_true_labels]
+    query_time = time.time() - start
+
+    if record_time:
+        return trainer, pred_labels, processed_true_labels, query_time
+    else:
+        return trainer, pred_labels, processed_true_labels 
 
 def setup_training_data(train_data, cell_type_key:str = 'cell_type', batch_key: str = '', batch_size=128, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
     datamodule = Cross_DataModule(train_data = train_data, cell_type_key = cell_type_key, batch_key = batch_key, num_workers=num_workers, batch_size=batch_size, log_norm = log_norm, hvg = hvg, normalize = normalize)

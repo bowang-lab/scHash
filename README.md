@@ -38,34 +38,34 @@ We compiled the six datasets into one AnnData object for easy demonstration. The
 
 
 ```python
-# load required package
-import anndata as ad
-from scHash import *
-
-# load data path
 data_dir = '../../../share_data/Pancreas_Wang/fivepancreas_wang_raw.h5ad'
 
-# This data contains both the reference and query source
-data = ad.read_h5ad(data_dir)
+# set up datamodule
+# This anndata object is packed with 6 pancreas dataset. We take one of them to be a test dataset here.  
+query = 'wang'
+full = ad.read_h5ad(data_dir)
+train = full[full.obs.dataset!=query]
+test = full[full.obs.dataset==query]
 
-# Split the reference and query data. 
-# We use Segerstolpe(smartseq) for query as demonstration. 
-# You could specify your query datasets.
 datamodule = scHash.setup_training_data(train_data = train,cell_type_key = 'cell_type', batch_key = 'dataset')
 
 # set the query data
-# this can be also done after train
+# this can be also set after train
 datamodule.setup_test_data(test)
 
-# Define a model output path
+########### consider write into a function again
+# Init ModelCheckpoint callback
 checkpointPath = '../checkpoint/'
 
-# Init the model and Train it
+# Init the model and Train
 model = scHash.scHashModel(datamodule)
-trainer, best_model_path = scHash.training(model = model, datamodule = datamodule, checkpointPath = checkpointPath, max_epochs = 50)
+trainer, best_model_path, training_time = scHash.training(model = model, datamodule = datamodule, checkpointPath = checkpointPath, max_epochs = 100)
+print(f'Training Time: {training_time}s')
 
-# Test the best model
-scHash.testing(trainer, model, best_model_path, datamodule)
+# Test the best model and output with the predicted labels
+# true labels can be accessed by `model.test_true_labels`
+# Cell type with less than 4 counts is named as `unknown` for the training due to the sparsity
+trainer, pred_labels, processed_true_labels = scHash.testing(trainer, model, best_model_path, datamodule)
 ```
 
 

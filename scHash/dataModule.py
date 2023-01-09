@@ -83,10 +83,10 @@ class Cross_DataModule(pl.LightningDataModule):
 
     def setup(self, stage):
         if  self.data_train == None:
-            # Step #1: Read in all labels and keep cells with count > 6
+            # Step #1: Read in all labels and keep cells with count > 4
             full_data = self.train_data.copy()
             unique = np.unique(full_data.obs[self.cell_type_key],return_counts=True)
-            idx  = [unique[1]<6]
+            idx  = [unique[1]<4]
             classes = unique[0][idx]
             full_data = full_data[~full_data.obs[self.cell_type_key].isin(classes),].copy()
 
