@@ -38,6 +38,11 @@ We compiled the six datasets into one AnnData object for easy demonstration. The
 
 
 ```python
+# load required package
+import anndata as ad
+from scHash import *
+
+# load data path
 data_dir = '../../../share_data/Pancreas_Wang/fivepancreas_wang_raw.h5ad'
 
 # set up datamodule
