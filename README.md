@@ -47,7 +47,8 @@ data_dir = '../../../share_data/Pancreas_Wang/fivepancreas_wang_raw.h5ad'
 
 # set up datamodule
 # This anndata object is packed with 6 pancreas dataset. We take one of them to be a test dataset here.  
-query = 'wang'
+# we use one of the six datasets to be the query dataset.
+query = 'smartseq'
 full = ad.read_h5ad(data_dir)
 train = full[full.obs.dataset!=query]
 test = full[full.obs.dataset==query]
