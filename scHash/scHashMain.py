@@ -35,7 +35,6 @@ class scHashModel(pl.LightningModule):
         self.weight_decay = weight_decay
         self.datamodule = None
         self.pred_labels = None
-        self.test_true_labels = None
 
         ##### model structure ####
         self.hash_layer = nn.Sequential(
@@ -83,13 +82,13 @@ class scHashModel(pl.LightningModule):
         return loss
 
     def training_step(self, train_batch, batch_idx):
-        data, labels = train_batch
+        data, labels, _ = train_batch
         hash_codes = self.forward(data)
         loss = self.loss_functions(hash_codes, labels)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        data, labels = val_batch
+        data, labels, _ = val_batch
         hash_codes = self.forward(data)
         loss = self.loss_functions(hash_codes, labels)
         return loss
@@ -137,13 +136,11 @@ class scHashModel(pl.LightningModule):
 
     def test_epoch_end(self, outputs):
         test_dataloader = self.trainer.datamodule.test_dataloader()
-
         # test_matrics_CHC = test_compute_metrics(test_dataloader, self)
-        labels_pred_CHC, labels_true, query_time = compute_labels(test_dataloader, self)
+        labels_pred_CHC, batchs_query, binaries_query, query_time = compute_labels(test_dataloader, self)
         
         # (accuracy,precision,recall,f1,hashing_time, cell_assign_time, query_time, f1_median, labels_pred_CHC, labels_true) = test_matrics_CHC
         self.pred_labels = labels_pred_CHC
-        self.test_true_labels = labels_true.numpy()
 
         # value = {"F1": f1,
         #          "F1_Median": f1_median,
@@ -166,7 +163,6 @@ class scHashModel(pl.LightningModule):
             optimizer, step_size=self.decay_every, gamma=self.lr_decay)
 
         return [optimizer], [exp_lr_scheduler]
-
 
 # helper func
 def training(model, datamodule, checkpointPath, filename:str = 'scHash-{epoch:02d}-{Val_F1_score_median_CHC_epoch:.3f}', max_epochs = 200):
@@ -191,22 +187,21 @@ def training(model, datamodule, checkpointPath, filename:str = 'scHash-{epoch:02
 
     return trainer, checkpoint_callback.best_model_path, training_time
 
-def testing(trainer, model, best_model_path, datamodule, record_time = False):
+def testing(trainer, model, best_model_path, datamodule, return_detail = False):
     # Test the best model
     best_model = scHashModel.load_from_checkpoint(best_model_path, datamodule=datamodule, l_r=model.l_r, lamb_da=model.lamb_da, beta=model.beta, bit=model.bit, lr_decay=model.lr_decay, decay_every=model.decay_every, weight_decay=model.weight_decay)
     best_model.eval()
 
-    start = time.time()
-    trainer.test(model=best_model, datamodule=datamodule)
+    test_dataloader = trainer.datamodule.test_dataloader()
+    labels_pred, batchs_query, binaries_query, query_time = compute_labels(test_dataloader, best_model)
+    
     label_map = {v: k for k, v in datamodule.label_mapping.items()}
-    pred_labels = [label_map[i] for i in best_model.pred_labels]
-    processed_true_labels = [label_map[i] for i in best_model.test_true_labels]
-    query_time = time.time() - start
+    pred_labels = [label_map[i] for i in labels_pred]
 
-    if record_time:
-        return trainer, pred_labels, processed_true_labels, query_time
+    if return_detail:
+        return pred_labels, binaries_query, batchs_query, query_time
     else:
-        return trainer, pred_labels, processed_true_labels 
+        return pred_labels, binaries_query
 
 def setup_training_data(train_data, cell_type_key:str = 'cell_type', batch_key: str = '', batch_size=128, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
     datamodule = Cross_DataModule(train_data = train_data, cell_type_key = cell_type_key, batch_key = batch_key, num_workers=num_workers, batch_size=batch_size, log_norm = log_norm, hvg = hvg, normalize = normalize)

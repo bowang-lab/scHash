@@ -64,7 +64,7 @@ def label_transform(label_dic,test_labels):
 
 class Cross_DataModule(pl.LightningDataModule):
 
-    def __init__(self, train_data, cell_type_key:str = 'cell_type', batch_key: str = '', batch_size=64, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
+    def __init__(self, train_data, batch_key:str, cell_type_key:str = 'cell_type', batch_size=64, num_workers=2, hvg:bool = True, log_norm:bool = True, normalize:bool = True):
         super().__init__()
         self.train_data = train_data
         self.batch_size = batch_size
@@ -95,10 +95,7 @@ class Cross_DataModule(pl.LightningDataModule):
             ## hvg selection
             if self.hvg:
                 self.N_FEATURES = 1000
-                if self.batch_key:
-                    sc.pp.highly_variable_genes(full_data,n_top_genes=1000,batch_key=self.batch_key,flavor='seurat_v3')
-                else:
-                    sc.pp.highly_variable_genes(full_data,n_top_genes=1000,flavor='seurat_v3')
+                sc.pp.highly_variable_genes(full_data,n_top_genes=1000,batch_key=self.batch_key,flavor='seurat_v3')
                     
                 self.highly_variable_genes = full_data.var['highly_variable'].values
                 full_data = full_data[:,self.highly_variable_genes].copy()
@@ -127,7 +124,7 @@ class Cross_DataModule(pl.LightningDataModule):
             int_labels = None
 
             # Step #3: Read in data based on selected label indices
-            full_dataset = SparseCustomDataset(data=full_data.X, labels=full_labels)
+            full_dataset = SparseCustomDataset(data=full_data.X, labels=full_labels, batch = full_data.obs[self.batch_key])
 
 
             random.seed(42)    
@@ -152,7 +149,7 @@ class Cross_DataModule(pl.LightningDataModule):
                           shuffle=True, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self.data_val, batch_size=self.batch_size,
+        return DataLoader(self.data_val, batch_size=self.batch_size, 
                           num_workers=self.num_workers)
 
     def test_dataloader(self):
@@ -174,10 +171,10 @@ class Cross_DataModule(pl.LightningDataModule):
                 data_test.X = csr_matrix((A + np.diag(b) * data_test.X.T).astype(np.float32).T)
                 data_test.X = self.scaler_train.transform(data_test.X)
             
-            test_labels = label_transform(self.label_mapping,data_test.obs[self.cell_type_key])
-            self.data_test = SparseCustomDataset(data=data_test.X, labels=np.asarray(test_labels))
+            self.data_test = SparseCustomDataset(data=data_test.X, labels=np.asarray([-1]*data_test.X.shape[0]),
+                                                 batch = data_test.obs[self.batch_key])
             
-        return DataLoader(self.data_test, batch_size=self.batch_size,
+        return DataLoader(self.data_test, batch_size=self.batch_size, 
                           num_workers=self.num_workers)
     
     def setup_test_data(self, test_data):
@@ -187,12 +184,13 @@ class Cross_DataModule(pl.LightningDataModule):
 class SparseCustomDataset(Dataset):
     "A dataset base class for PyTorch Lightening"
 
-    def __init__(self, data, labels):
+    def __init__(self, data, labels, batch):
         "Dataset Class Initialization"
         # Number of data and labels should match
         assert data.shape[0] == labels.shape[0]
         self.labels = labels
         self.data = data
+        self.batch = batch
 
     def __len__(self):
         "Returns the total number of samples"
@@ -200,4 +198,4 @@ class SparseCustomDataset(Dataset):
 
     def __getitem__(self, index: int):
         # Load data and get label
-        return self.data[index].toarray()[0], self.labels[index]
+        return self.data[index].toarray()[0], self.labels[index], self.batch[index]

@@ -63,7 +63,7 @@ datamodule = scHash.setup_training_data(train_data = train,cell_type_key = 'cell
 datamodule.setup_test_data(test)
 
 ########### consider write into a function again
-# Init ModelCheckpoint callback
+# Specify a directory for saving the best model
 checkpointPath = '../checkpoint/'
 
 # Init the model and Train
@@ -71,10 +71,8 @@ model = scHash.scHashModel(datamodule)
 trainer, best_model_path, training_time = scHash.training(model = model, datamodule = datamodule, checkpointPath = checkpointPath, max_epochs = 100)
 print(f'Training Time: {training_time}s')
 
-# Test the best model and output with the predicted labels
-# true labels can be accessed by `model.test_true_labels`
-# Cell type with less than 4 counts is named as `unknown` for the training due to the sparsity
-trainer, pred_labels, processed_true_labels = scHash.testing(trainer, model, best_model_path, datamodule)
+# Test the best model and output with the predicted labels and the hash code expression of the cell.
+pred_labels, hash_codes = scHash.testing(trainer, model, best_model_path, datamodule)
 ```
 
 

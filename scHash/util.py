@@ -22,10 +22,9 @@ def compute_metrics(query_dataloader, net):
     - Less Accurate
     '''
     # print("Compute result using gpu")
-    binaries_query, labels_query = compute_result(query_dataloader, net)
+    binaries_query, labels_query, _ = compute_result(query_dataloader, net)
     
-    labels_pred_CHC = get_labels_pred_closest_cell_anchor(binaries_query.cpu().numpy(), labels_query.numpy(),
-                                                        net.cell_anchors.numpy())
+    labels_pred_CHC = get_labels_pred_closest_cell_anchor(binaries_query.cpu().numpy(),net.cell_anchors.numpy())
  
     # (1) labeling accuracy
     labeling_accuracy_CHC = compute_labeling_strategy_accuracy(labels_pred_CHC, labels_query.numpy())
@@ -51,23 +50,26 @@ def compute_metrics(query_dataloader, net):
 
         
 def compute_result(dataloader, net):
-    binariy_codes, labels = [],[]
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')  
+    binariy_codes, labels, batchs = [],[],[]
+    device = torch.device('cuda:0')  
+    net = net.to(device)
     for data in dataloader:
         img = data[0].to(device)
         binariy_codes.append(net(img))
         labels.append(data[1])
-    return torch.vstack(binariy_codes),torch.cat(labels)
+        batchs.append(data[2])
+    return torch.vstack(binariy_codes),torch.cat(labels),batchs
+
 
 def compute_labels(query_dataloader, net):
     start = time.time()
-    binaries_query,labels_query = compute_result(query_dataloader, net) 
+    binaries_query, _ , batchs_query = compute_result(query_dataloader, net) 
     
     start = time.time() 
-    labels_pred_CHC = get_labels_pred_closest_cell_anchor(binaries_query.cpu().numpy(), labels_query.numpy(),
-                                                        net.cell_anchors.numpy())
+    binaries_query = binaries_query.detach().cpu().numpy()
+    labels_pred_CHC = get_labels_pred_closest_cell_anchor(binaries_query, net.cell_anchors.numpy())
     query_time = time.time() - start
-    return labels_pred_CHC, labels_query.numpy(), query_time
+    return labels_pred_CHC, batchs_query, binaries_query, query_time
 
 
 def test_compute_metrics(query_dataloader, net):
@@ -79,18 +81,12 @@ def test_compute_metrics(query_dataloader, net):
     m = number of classes in database
     - Less Accurate
     '''
-    # print("Compute result using gpu")
-    ######################## modified here
     start = time.time()
-    # original function
-    # binaries_query, labels_query = compute_result(query_dataloader, net)
-    binaries_query,labels_query = compute_result(query_dataloader, net)
-    hashing_time = time.time() - start
-    ######################## modified here    
+    binaries_query,labels_query,_  = compute_result(query_dataloader, net)
+    hashing_time = time.time() - start 
     
     start = time.time() 
-    labels_pred_CHC = get_labels_pred_closest_cell_anchor(binaries_query.cpu().numpy(), labels_query.numpy(),
-                                                        net.cell_anchors.numpy())
+    labels_pred_CHC = get_labels_pred_closest_cell_anchor(binaries_query.cpu().numpy(), net.cell_anchors.numpy())
     cell_assign_time = time.time() - start
     
     query_time = cell_assign_time+hashing_time
@@ -143,9 +139,9 @@ def get_cell_anchors(n_class, bit):
 
 
 # Predict label using Closest Cell Anchor strategy (b)
-def get_labels_pred_closest_cell_anchor(query_binaries, query_labels, cell_anchors):
+def get_labels_pred_closest_cell_anchor(query_binaries,cell_anchors):
     labels_pred = []
-    for binary_query, label_query in zip(query_binaries, query_labels):
+    for binary_query in query_binaries:
           dists = CalcHammingDist(binary_query, cell_anchors)
           closest_class = np.argmin(dists)
           labels_pred.append(closest_class)
