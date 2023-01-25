@@ -1,5 +1,5 @@
 # scHash 
-scHash is an accurate, efficient, and interpretable deep hashing-based method that can build multi-million reference database and annotate tens of thousands of cells within seconds.
+With the increasing availability of large-scale single-cell omics datasets, supervised learning-based cell type annotation tools have positioned their unique advantage in improving annotation accuracy without prior biological information. However, due to the inherent high-dimensionality of single-cell omics data, existing methods lack the capacity or efficiency to handle atlas-level annotation tasks. To address these challenges, we hereby propose scHash, an accurate, efficient, and interpretable deep hashing-based method that can build multi-million reference database and annotate tens of thousands of cells. scHash is robust to batch effects between the query set and the reference database, which is commonly seen in real query tasks. We demonstrate scHash’s accurate and efficient cell type annotation performance as well as its interpretable functionalities on single cell omics datasets across multiple heterogeneous batches and on atlas-level dataset with 1.4M cells. The full paper will be up soon.
 
 
 ## :heavy_plus_sign: Method
@@ -62,8 +62,7 @@ datamodule = scHash.setup_training_data(train_data = train,cell_type_key = 'cell
 # this can be also set after train
 datamodule.setup_test_data(test)
 
-########### consider write into a function again
-# Specify a directory for saving the best model
+# set a path for saving the best model
 checkpointPath = '../checkpoint/'
 
 # Init the model and Train
@@ -71,7 +70,8 @@ model = scHash.scHashModel(datamodule)
 trainer, best_model_path, training_time = scHash.training(model = model, datamodule = datamodule, checkpointPath = checkpointPath, max_epochs = 100)
 print(f'Training Time: {training_time}s')
 
-# Test the best model and output with the predicted labels and the hash code expression of the cell.
+# Test the best model and output with the predicted labels 
+# and the hash code expression of the cell.
 pred_labels, hash_codes = scHash.testing(trainer, model, best_model_path, datamodule)
 ```
 
