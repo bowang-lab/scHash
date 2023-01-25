@@ -28,7 +28,7 @@ scHash can efficiently annotate large-scale scRNA-seq dataset and offer interpre
 $ pip install scHash
 ```
 
-## Example Usage
+## Cell Type Annotation using Heterogeneous scRNA-seq datasets
 
 We demonstrate how scHash encodes multiple datasets into hash codes for six publicly available Pancreas datasets.
 
