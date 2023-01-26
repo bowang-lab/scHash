@@ -28,51 +28,8 @@ scHash can efficiently annotate large-scale scRNA-seq dataset and offer interpre
 $ pip install scHash
 ```
 
-## Cell Type Annotation using Heterogeneous scRNA-seq datasets
+# :heavy_plus_sign: Tutorial
 
-We demonstrate how scHash encodes multiple datasets into hash codes for six publicly available Pancreas datasets.
+We offer the following tutorials for demostration:
 
-The raw data for the first five datasets can be obtained from [Harmony](https://github.com/immunogenomics/harmony2019/tree/master/data/figure5).
-
-The sixth Pancreas dataset is from [(Wang et al., 2016)](https://diabetesjournals.org/diabetes/article/65/10/3028/34922/Single-Cell-Transcriptomics-of-the-Human-Endocrine) is publicly available at [GSE83139](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE83139).
-
-We compiled the six datasets into one AnnData object for easy demonstration. The processed data can be downloaded [here](https://drive.google.com/file/d/1shc4OYIbq2FwbyGUaYuzizuvzW-giSTs/view?usp=share_link).
-
-
-
-```python
-# load required package
-import anndata as ad
-import scHash
-
-# load data path
-data_dir = '../../../share_data/Pancreas_Wang/fivepancreas_wang_raw.h5ad'
-
-# set up datamodule
-# This anndata object is packed with 6 pancreas dataset. We take one of them to be a test dataset here.  
-# we use one of the six datasets to be the query dataset.
-query = 'smartseq'
-full = ad.read_h5ad(data_dir)
-train = full[full.obs.dataset!=query]
-test = full[full.obs.dataset==query]
-
-datamodule = scHash.setup_training_data(train_data = train,cell_type_key = 'cell_type', batch_key = 'dataset')
-
-# set the query data
-# this can be also set after train
-datamodule.setup_test_data(test)
-
-# set a path for saving the best model
-checkpointPath = '../checkpoint/'
-
-# Init the model and Train
-model = scHash.scHashModel(datamodule)
-trainer, best_model_path, training_time = scHash.training(model = model, datamodule = datamodule, checkpointPath = checkpointPath, max_epochs = 100)
-print(f'Training Time: {training_time}s')
-
-# Test the best model and output with the predicted labels 
-# and the hash code expression of the cell.
-pred_labels, hash_codes = scHash.testing(trainer, model, best_model_path, datamodule)
-```
-
-
+* [scRNA-seq annotation (6 pancreas) and the interpretability](https://github.com/bowang-lab/scHash/blob/master/vignettes/scRNA-seq_annotations_and_interpretability.ipynb)
