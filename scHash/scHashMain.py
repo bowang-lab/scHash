@@ -207,3 +207,54 @@ def setup_training_data(train_data, cell_type_key:str = 'cell_type', batch_key: 
     datamodule = Cross_DataModule(train_data = train_data, cell_type_key = cell_type_key, batch_key = batch_key, num_workers=num_workers, batch_size=batch_size, log_norm = log_norm, hvg = hvg, normalize = normalize)
     datamodule.setup(None)
     return datamodule
+
+def compute_cell_composition(trainer, best_model_path, model, K:int = 100):
+    best_model = scHashModel.load_from_checkpoint(best_model_path, datamodule=trainer.datamodule, l_r=model.l_r, lamb_da=model.lamb_da, beta=model.beta, bit=model.bit, lr_decay=model.lr_decay, decay_every=model.decay_every, weight_decay=model.weight_decay)
+    best_model.eval()
+    binaries_train, labels_train, batch_train = compute_result(trainer.datamodule.train_dataloader(), best_model)
+    binaries_val, labels_val, batch_val = compute_result(trainer.datamodule.val_dataloader(), best_model)
+    binaries_database, labels_database, labels_batch = torch.cat([binaries_train, binaries_val]), torch.cat([labels_train, labels_val]), batch_train+batch_val
+
+    binaries_test, labels_test, _  = compute_result(trainer.datamodule.test_dataloader(), best_model)
+
+    binaries_database, labels_database = binaries_database.cpu().detach().numpy(), labels_database.cpu().detach().numpy()
+    binaries_test, _ = binaries_test.cpu().detach().numpy(), labels_test.cpu().detach().numpy()
+    labels_test = [trainer.datamodule.label_mapping[i] for i in trainer.datamodule.test_data.obs.cell_type]
+
+
+    K = K # number of cell to retrivel
+    batch_list = ['smartseq', 'c1', 'wang', 'indrop', 'celseq', 'celseq2']
+    celltype_list = ['true label', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']
+    df_batch = pd.DataFrame(columns=batch_list)
+    df_celltype = pd.DataFrame(columns=celltype_list)
+
+    for i in range(len(binaries_test)):
+
+        dists = CalcHammingDist(binaries_test[i], binaries_database)
+
+        idx = np.argpartition(dists, K)[:K]
+        celltype_metadata = labels_database[idx]
+        batch_metadata = np.hstack(labels_batch)[idx]
+
+        df_temp = pd.DataFrame({'celltype':celltype_metadata,'batch':batch_metadata})
+
+        df_temp_batch = df_temp.batch.value_counts()
+        df_temp_celltype = df_temp.celltype.value_counts()
+
+        zero_data = np.zeros(shape=(1,len(batch_list)))
+        df_one_batch = pd.DataFrame(zero_data, columns=batch_list)
+        zero_data = np.zeros(shape=(1,len(celltype_list)))
+        df_one_celltype = pd.DataFrame(zero_data, columns=celltype_list)
+
+        for j in range(len(df_temp_batch)):
+            df_one_batch[df_temp_batch.index[j]] = df_temp_batch.iloc[j]
+
+        for k in range(len(df_temp_celltype)):
+            df_one_celltype[str(df_temp_celltype.index[k])] = df_temp_celltype.iloc[k]
+
+        df_one_celltype['true label'] = labels_test[i]
+
+        df_batch = pd.concat([df_batch, df_one_batch], axis=0)
+        df_celltype = pd.concat([df_celltype, df_one_celltype], axis=0)
+        
+    return df_celltype, df_batch
