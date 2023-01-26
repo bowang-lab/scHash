@@ -30,6 +30,6 @@ $ pip install scHash
 
 # :heavy_plus_sign: Tutorial
 
-We offer the following tutorials for demostration:
+We offer the following tutorials for demonstration:
 
 * [scRNA-seq annotation (6 pancreas) and the interpretability](https://github.com/bowang-lab/scHash/blob/main/vignettes/scRNA-seq_annotations_and_interpretability.ipynb)
