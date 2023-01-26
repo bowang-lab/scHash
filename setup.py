@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '1.4.2'
+VERSION = '1.4.4.2'
 DESCRIPTION = 'scHash package for scRNA-seq data integration'
 LONG_DESCRIPTION = 'A package that could integrate atlas-level scRNA-seq datasets with multi-million reference database and annotate tens of thousands of cells within seconds.'
 
@@ -23,7 +23,8 @@ setup(
         "scikit-learn>=1.0.2",
         "pandas>=1.1.0",
         "anndata>=0.8.0",
-        "scanpy>=1.7"
+        "scanpy>=1.7",
+        "matplotlib>=3.4.3"
     ],
     classifiers= [
         "Development Status :: 3 - Alpha",

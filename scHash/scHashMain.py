@@ -187,15 +187,15 @@ def training(model, datamodule, checkpointPath, filename:str = 'scHash-{epoch:02
 
     return trainer, checkpoint_callback.best_model_path, training_time
 
-def testing(trainer, model, best_model_path, datamodule, return_detail = False):
+def testing(trainer, model, best_model_path, return_detail = False):
     # Test the best model
-    best_model = scHashModel.load_from_checkpoint(best_model_path, datamodule=datamodule, l_r=model.l_r, lamb_da=model.lamb_da, beta=model.beta, bit=model.bit, lr_decay=model.lr_decay, decay_every=model.decay_every, weight_decay=model.weight_decay)
+    best_model = scHashModel.load_from_checkpoint(best_model_path, datamodule=trainer.datamodule, l_r=model.l_r, lamb_da=model.lamb_da, beta=model.beta, bit=model.bit, lr_decay=model.lr_decay, decay_every=model.decay_every, weight_decay=model.weight_decay)
     best_model.eval()
 
     test_dataloader = trainer.datamodule.test_dataloader()
     labels_pred, batchs_query, binaries_query, query_time = compute_labels(test_dataloader, best_model)
     
-    label_map = {v: k for k, v in datamodule.label_mapping.items()}
+    label_map = {v: k for k, v in trainer.datamodule.label_mapping.items()}
     pred_labels = [label_map[i] for i in labels_pred]
 
     if return_detail:

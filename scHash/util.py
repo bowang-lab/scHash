@@ -7,7 +7,8 @@ import numpy as np
 from sklearn.metrics import f1_score, precision_score, recall_score
 from sklearn.metrics import classification_report
 from .dataModule import *
-
+import matplotlib.pyplot as plt
+from matplotlib import cm
 import time
 import random
 
@@ -163,3 +164,26 @@ def compute_labeling_strategy_accuracy(labels_pred, labels_query):
         same += 1
 
     return same / labels_query.shape[0]
+
+
+def plot_component(df_celltype,df_batch, trainer, nth_query:int=1):
+    y = df_celltype.iloc[nth_query-1,1:]
+    y = y[y!=0]
+    label_map = {v: k for k, v in trainer.datamodule.label_mapping.items()}
+    mylabels = [label_map[int(i)] for i in y.index]
+
+    myexplode = [0.2 if int(index) == df_celltype.iloc[100,0] else 0 for index in y.index]
+
+    plt.figure(figsize=(8,8)) 
+    plt.title(f'Cell type composition of the {int(np.sum(df_batch.iloc[0,:]))} nearest cell anchors to the query cell')
+    plt.pie(y, labels = mylabels, explode = myexplode,colors=cm.Set2(range(len(y))))
+    plt.show() 
+
+    y = df_batch.iloc[nth_query-1,1:]
+    y = y[y!=0]
+    mylabels = y.index
+
+    plt.figure(figsize=(8,8)) 
+    plt.title(f'Dataset composition of the {int(np.sum(df_batch.iloc[0,:]))} nearest cell anchors to the query cell')
+    plt.pie(y, labels = mylabels,colors=cm.Set2(range(len(y))))
+    plt.show()
