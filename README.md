@@ -32,4 +32,4 @@ $ pip install scHash
 
 We offer the following tutorials for demostration:
 
-* [scRNA-seq annotation (6 pancreas) and the interpretability](https://github.com/bowang-lab/scHash/blob/master/vignettes/scRNA-seq_annotations_and_interpretability.ipynb)
+* [scRNA-seq annotation (6 pancreas) and the interpretability](https://github.com/bowang-lab/scHash/blob/main/vignettes/scRNA-seq_annotations_and_interpretability.ipynb)
