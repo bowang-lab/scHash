@@ -41,8 +41,8 @@ def split_test_train_val_database_sets(full_dataset, train_percentage, val_perce
 
 def label_encoder(labels):
     labels = np.unique(labels).astype(str).tolist()
-    if 'unknown' not in labels:
-        labels.append('unknown')
+    # if 'unknown' not in labels:
+    #     labels.append('unknown')
         
     df = pd.DataFrame(columns=['labels','num'])
     df['labels']=labels
@@ -56,10 +56,10 @@ def label_encoder(labels):
 def label_transform(label_dic,test_labels):
     test_transformed_labels = []
     for i in test_labels:
-        if i not in label_dic.keys():
-            test_transformed_labels.append(label_dic['unknown'])
-        else:
-            test_transformed_labels.append(label_dic[i])
+        # if i not in label_dic.keys():
+        #     test_transformed_labels.append(label_dic['unknown'])
+        # else:
+        test_transformed_labels.append(label_dic[i])
     return test_transformed_labels
 
 class Cross_DataModule(pl.LightningDataModule):

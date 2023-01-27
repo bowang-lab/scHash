@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import f1_score, precision_score, recall_score
 from sklearn.metrics import classification_report
-from .dataModule import *
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import time

@@ -34,3 +34,4 @@ We offer the following tutorials for demonstration:
 
 * [scRNA-seq annotation (6 pancreas) and the interpretability](https://github.com/bowang-lab/scHash/blob/main/vignettes/scRNA-seq_annotations_and_interpretability.ipynb)
 * [scATAC-seq annotation](https://github.com/bowang-lab/scHash/blob/main/vignettes/scATAC-seq_annotations.ipynb)
+* [atlas_level cell annotation](https://github.com/bowang-lab/scHash/blob/main/vignettes/atlas_level_annotations.ipynb)

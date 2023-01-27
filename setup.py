@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '1.4.4.2'
+VERSION = '1.4.4.3'
 DESCRIPTION = 'scHash package for scRNA-seq data integration'
 LONG_DESCRIPTION = 'A package that could integrate atlas-level scRNA-seq datasets with multi-million reference database and annotate tens of thousands of cells within seconds.'
 
